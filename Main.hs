@@ -213,9 +213,6 @@ colorsAvailable system = (map (view color) $ starMakeup $ view star system)
 currentPlayer ∷ Game PlayerId
 currentPlayer = view turn <$> get
 
-validActionSequence ∷ [Action] → Bool
-validActionSequence _ = True -- undefined
-
 pieceAvailable ∷ Piece → Game Bool
 pieceAvailable pc = do
   st ← get
@@ -337,6 +334,39 @@ deleteShip loc ship = do
          $ Just . (over ships (List.delete ship))
 
 
+-- Validate Action Sequences ---------------------------------------------------------------------------------
+
+piecePower ∷ Piece → Int
+piecePower pc = view size pc & \case { Small → 1; Medium → 2; Large → 3 }
+
+validActionSequence ∷ [Action] → Bool
+validActionSequence = checkValid
+  where
+    isCatastrophe ∷ Action → Bool
+    isCatastrophe = \case { Catastrophe _ _ → True; _ → False }
+
+    checkValid ∷ [Action] → Bool
+    checkValid = \case
+      []                       → False
+      Construct _ _     : more → all isCatastrophe more
+      Move _ _ _        : more → all isCatastrophe more
+      Attack _ _        : more → all isCatastrophe more
+      Trade _ _ _       : more → all isCatastrophe more
+      s@(Sacrifice l p) : more → checkSacrifice (p^.color) (piecePower p) more
+      Catastrophe _ _   : more → validActionSequence more
+
+    checkSacrifice ∷ Color → Int → [Action] → Bool
+    checkSacrifice c 0     = all isCatastrophe
+    checkSacrifice c power = \case
+      []                     → False
+      Catastrophe _ _ : more → checkSacrifice c power more
+      Sacrifice _ _   : _    → False
+      Construct _ _   : more → c == Green  && checkSacrifice c (power - 1) more
+      Move _ _ _      : more → c == Yellow && checkSacrifice c (power - 1) more
+      Attack _ _      : more → c == Red    && checkSacrifice c (power - 1) more
+      Trade _ _ _     : more → c == Blue   && checkSacrifice c (power - 1) more
+
+
 -- Implementations for Moves ---------------------------------------------------------------------------------
 
 logEvent ∷ Event → Game ()
@@ -394,6 +424,13 @@ tradeShip loc pc newColor = do
   takePc (newShip ^. piece)
   placeShip loc newShip
 
+sacrificeShip ∷ SystemId → Piece → Game ()
+sacrificeShip loc pc = do
+  player ← currentPlayer
+  let ship = Ship player pc
+  guard =<< shipExistsAt loc ship
+  deleteShip loc ship
+
 moveShip ∷ SystemId → Piece → Destination → Game ()
 moveShip loc pc dest = do
   player ← currentPlayer
@@ -411,6 +448,7 @@ applyAction = \case
   Move      loc p dest   → moveShip loc p dest
   Attack    loc target   → attackShip loc target
   Trade     loc target c → tradeShip loc target c
+  Sacrifice loc target   → sacrificeShip loc target
   _                      → undefined
 
 applyEvent ∷ Event → Game ()
@@ -418,7 +456,7 @@ applyEvent ev = do
   ev & \case
     Join setup   → void (joinGame setup)
     Resign       → undefined
-    Turn actions → do guard (validActionSequence actions)
+    Turn actions → do guard $ validActionSequence actions
                       sequence_ (applyAction <$> actions)
                       advanceTurn
   logEvent ev
@@ -469,11 +507,20 @@ arbitraryTrade = do
 arbitraryConstruction ∷ Game Action
 arbitraryConstruction = Construct <$> arbitrarySystem <*> lift enumeration
 
+arbitrarySacrifice ∷ Game Action
+arbitrarySacrifice = do
+  loc    ← arbitrarySystem
+  sys    ← getSystem loc
+  pl     ← currentPlayer
+  target ← lift $ filter ((pl ==) . view owner) $ view ships sys
+  return $ Sacrifice loc (target ^. piece)
+
 arbitraryAction ∷ Game Action
 arbitraryAction = join $ lift [ arbitraryMove
                               , arbitraryConstruction
                               , arbitraryAttack
                               , arbitraryTrade
+                              , arbitrarySacrifice
                               ]
 
 arbitrarySetup ∷ Game Setup
