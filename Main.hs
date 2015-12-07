@@ -383,6 +383,17 @@ attackShip loc target = do
   takePc (view piece target)
   placeShip loc $ Ship player (view piece target)
 
+tradeShip ∷ SystemId → Piece → Color → Game ()
+tradeShip loc pc newColor = do
+  player ← currentPlayer
+  let oldShip = Ship player pc
+  guard =<< actionAvailable loc Blue
+  guard =<< shipExistsAt loc oldShip
+  let newShip = set (piece . color) newColor oldShip
+  deleteShip loc oldShip
+  takePc (newShip ^. piece)
+  placeShip loc newShip
+
 moveShip ∷ SystemId → Piece → Destination → Game ()
 moveShip loc pc dest = do
   player ← currentPlayer
@@ -396,10 +407,11 @@ moveShip loc pc dest = do
 
 applyAction ∷ Action → Game ()
 applyAction = \case
-  Construct loc c   → constructShip loc c
-  Move loc p dest   → moveShip loc p dest
-  Attack loc target → attackShip loc target
-  _                 → undefined
+  Construct loc c        → constructShip loc c
+  Move      loc p dest   → moveShip loc p dest
+  Attack    loc target   → attackShip loc target
+  Trade     loc target c → tradeShip loc target c
+  _                      → undefined
 
 applyEvent ∷ Event → Game ()
 applyEvent ev = do
@@ -445,11 +457,24 @@ arbitraryAttack = do
   target ← lift $ filter ((pl /=) . view owner) $ view ships sys
   return $ Attack loc target
 
+arbitraryTrade ∷ Game Action
+arbitraryTrade = do
+  loc    ← arbitrarySystem
+  sys    ← getSystem loc
+  pl     ← currentPlayer
+  target ← lift $ filter ((pl ==) . view owner) $ view ships sys
+  color  ← lift $ filter (/= target^.piece.color) enumeration
+  return $ Trade loc (target ^. piece) color
+
 arbitraryConstruction ∷ Game Action
 arbitraryConstruction = Construct <$> arbitrarySystem <*> lift enumeration
 
 arbitraryAction ∷ Game Action
-arbitraryAction = join $ lift [arbitraryMove, arbitraryConstruction, arbitraryAttack]
+arbitraryAction = join $ lift [ arbitraryMove
+                              , arbitraryConstruction
+                              , arbitraryAttack
+                              , arbitraryTrade
+                              ]
 
 arbitrarySetup ∷ Game Setup
 arbitrarySetup = do
