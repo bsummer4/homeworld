@@ -515,12 +515,22 @@ arbitrarySacrifice = do
   target ← lift $ filter ((pl ==) . view owner) $ view ships sys
   return $ Sacrifice loc (target ^. piece)
 
+arbitraryActionSequence ∷ Game [Action]
+arbitraryActionSequence = do
+  action ← join $ lift [arbitraryAction, arbitrarySacrifice]
+  case action of
+    Sacrifice loc pc → fmap (action:) $ replicateM (piecePower pc) $ case (view color pc) of
+                           Red    → arbitraryAttack
+                           Green  → arbitraryConstruction
+                           Blue   → arbitraryTrade
+                           Yellow → arbitraryMove
+    _                → return [action]
+
 arbitraryAction ∷ Game Action
 arbitraryAction = join $ lift [ arbitraryMove
                               , arbitraryConstruction
                               , arbitraryAttack
                               , arbitraryTrade
-                              , arbitrarySacrifice
                               ]
 
 arbitrarySetup ∷ Game Setup
@@ -546,10 +556,10 @@ performArbitraryJoin = do
   setup ← arbitrarySetup
   applyEvent (Join setup)
 
-performArbitraryAction ∷ Game ()
-performArbitraryAction = do
-  action ← arbitraryAction
-  applyEvent (Turn [action])
+performArbitraryActionSequence ∷ Game ()
+performArbitraryActionSequence = do
+  actions ← arbitraryActionSequence
+  applyEvent (Turn actions)
 
 
 -- Tie everything together. ----------------------------------------------------------------------------------
@@ -586,7 +596,7 @@ main = do
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
 
-  let allFollowupStates = flip execStateT initial $ replicateM 5 performArbitraryAction
+  let allFollowupStates = flip execStateT initial $ replicateM 5 performArbitraryActionSequence
 
   print (length allFollowupStates)
 
