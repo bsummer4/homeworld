@@ -448,6 +448,7 @@ systemStarColors loc = do
   sys ← getSystem loc
   return $ view color <$> starMakeup (view star sys)
 
+-- TODO Add everything back to the bank.
 destroySystem ∷ SystemId → Game ()
 destroySystem = modify . over systems . Map.delete
 
@@ -479,13 +480,15 @@ causeCatastrophe loc c = do
   when deathstar (destroyStarsWithColor loc c)
 
 applyAction ∷ Action → Game ()
-applyAction = \case
-  Construct   loc c        → constructShip loc c
-  Move        loc p dest   → moveShip loc p dest
-  Attack      loc target   → attackShip loc target
-  Trade       loc target c → tradeShip loc target c
-  Sacrifice   loc target   → sacrificeShip loc target
-  Catastrophe loc color    → causeCatastrophe loc color
+applyAction act = do
+  act & \case
+    Construct   loc c        → constructShip loc c
+    Move        loc p dest   → moveShip loc p dest
+    Attack      loc target   → attackShip loc target
+    Trade       loc target c → tradeShip loc target c
+    Sacrifice   loc target   → sacrificeShip loc target
+    Catastrophe loc color    → causeCatastrophe loc color
+  cleanup
 
 applyEvent ∷ Event → Game ()
 applyEvent ev = do
@@ -585,6 +588,13 @@ arbitraryAction = join $ lift [ arbitraryMove
                               , arbitraryAttack
                               , arbitraryTrade
                               ]
+
+cleanup ∷ Game ()
+cleanup = do
+  sysIds ← Map.keys . view systems <$> get
+  forM_ sysIds $ \loc → do
+    docked ← view ships <$> getSystem loc
+    when (null docked) $ destroySystem loc
 
 arbitrarySetup ∷ Game Setup
 arbitrarySetup = do
