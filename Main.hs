@@ -259,12 +259,6 @@ initialize = mapM_ joinGame
 
 -- Game Logic Basics -----------------------------------------------------------------------------------------
 
-ownedBy ∷ PlayerId → Ship → Bool
-ownedBy player ship = ship ^. owner == player
-
-hasColor ∷ Color → Ship → Bool
-hasColor col ship = ship ^. (piece . color) == col
-
 getSystem ∷ SystemId → Game System
 getSystem sysId = do
   st ← get
@@ -278,6 +272,13 @@ destinationId (Fresh pc)     = do
 
 shipsAt ∷ SystemId → (Ship → Bool) → Game [Ship]
 shipsAt loc pred = filter pred . view ships <$> getSystem loc
+
+piecesAt ∷ SystemId → (Piece → Bool) → Game [Piece]
+piecesAt loc pred = do
+  sys ← getSystem loc
+  return $ filter pred
+         $ fmap (view piece) (view ships sys)
+        <> starMakeup (sys^.star)
 
 shipsExistAt ∷ SystemId → (Ship → Bool) → Game Bool
 shipsExistAt loc  pred = not . null <$> shipsAt loc pred
@@ -442,14 +443,49 @@ moveShip loc pc dest = do
   takePc (ship ^. piece)
   placeShip to ship
 
+systemStarColors ∷ SystemId → Game [Color]
+systemStarColors loc = do
+  sys ← getSystem loc
+  return $ view color <$> starMakeup (view star sys)
+
+destroySystem ∷ SystemId → Game ()
+destroySystem = modify . over systems . Map.delete
+
+destroyStarsWithColor ∷ SystemId → Color → Game ()
+destroyStarsWithColor loc c = do
+  thisStar ← view star <$> getSystem loc
+
+  let starPieces = starMakeup thisStar
+      remaining  = filter (\p → p^.color /= c) starPieces
+
+  guard $ length starPieces /= length remaining
+  case remaining of
+    []  → destroySystem loc
+    [p] → modify $ over systems
+                 $ flip Map.update loc
+                 $ Just . set star (Single p)
+
+causeCatastrophe ∷ SystemId → Color → Game ()
+causeCatastrophe loc c = do
+  fuel ← piecesAt loc (\p → c == p^.color)
+  guard $ length fuel >= 4
+
+  -- It's important that we do this before we kill the star, otherwise we
+  -- might try to delete ships that no longer exist.
+  targets ← shipsAt loc (\p → c == p^.piece.color)
+  forM_ targets (deleteShip loc)
+
+  deathstar ← (c `elem`) <$> systemStarColors loc
+  when deathstar (destroyStarsWithColor loc c)
+
 applyAction ∷ Action → Game ()
 applyAction = \case
-  Construct loc c        → constructShip loc c
-  Move      loc p dest   → moveShip loc p dest
-  Attack    loc target   → attackShip loc target
-  Trade     loc target c → tradeShip loc target c
-  Sacrifice loc target   → sacrificeShip loc target
-  _                      → undefined
+  Construct   loc c        → constructShip loc c
+  Move        loc p dest   → moveShip loc p dest
+  Attack      loc target   → attackShip loc target
+  Trade       loc target c → tradeShip loc target c
+  Sacrifice   loc target   → sacrificeShip loc target
+  Catastrophe loc color    → causeCatastrophe loc color
 
 applyEvent ∷ Event → Game ()
 applyEvent ev = do
@@ -507,6 +543,17 @@ arbitraryTrade = do
 arbitraryConstruction ∷ Game Action
 arbitraryConstruction = Construct <$> arbitrarySystem <*> lift enumeration
 
+arbitraryCatastrophe ∷ Game Action
+arbitraryCatastrophe = do
+  loc     ← arbitrarySystem
+  c       ← lift enumeration
+  targets ← piecesAt loc (\p → c == p^.color)
+  guard $ length targets >= 4
+  return (Catastrophe loc c)
+
+possibleCatastrophes ∷ Game [Action]
+possibleCatastrophes = evalStateT arbitraryCatastrophe <$> get
+
 arbitrarySacrifice ∷ Game Action
 arbitrarySacrifice = do
   loc    ← arbitrarySystem
@@ -525,6 +572,12 @@ arbitraryActionSequence = do
                            Blue   → arbitraryTrade
                            Yellow → arbitraryMove
     _                → return [action]
+
+arbitraryActionSequenceOfDeath ∷ Game [Action]
+arbitraryActionSequenceOfDeath =
+  possibleCatastrophes >>= \case
+    []   → arbitraryActionSequence
+    evil → (evil ++) <$> arbitraryActionSequence
 
 arbitraryAction ∷ Game Action
 arbitraryAction = join $ lift [ arbitraryMove
@@ -558,7 +611,7 @@ performArbitraryJoin = do
 
 performArbitraryActionSequence ∷ Game ()
 performArbitraryActionSequence = do
-  actions ← arbitraryActionSequence
+  actions ← arbitraryActionSequenceOfDeath
   applyEvent (Turn actions)
 
 
@@ -596,7 +649,7 @@ main = do
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
 
-  let allFollowupStates = flip execStateT initial $ replicateM 5 performArbitraryActionSequence
+  let allFollowupStates = flip execStateT initial $ replicateM 4 performArbitraryActionSequence
 
   print (length allFollowupStates)
 
