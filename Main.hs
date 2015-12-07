@@ -83,7 +83,7 @@ data Destination = Existing SystemId
 data Action = Construct SystemId Color
             | Trade SystemId Piece Color
             | Move SystemId Piece Destination
-            | Attack SystemId Piece
+            | Attack SystemId Ship
             | Sacrifice SystemId Piece
             | Catastrophe SystemId Color
   deriving (Eq, Ord, Show)
@@ -144,18 +144,18 @@ exampleGame =
   , Turn [Move 0 (Piece Yellow Large) (Fresh (Piece Red Large))]
 
   , Turn [Move 0 (Piece Yellow Small) (Existing 2)]
-  , Turn [Attack 2 (Piece Yellow Small)]
+  , Turn [Attack 2 (Ship 0 (Piece Yellow Small))]
 
   , Turn [ Catastrophe 99 Blue
          , Catastrophe 99 Green
-         , Attack 2 (Piece Yellow Small)
+         , Attack 2 (Ship 0 (Piece Yellow Small))
          , Catastrophe 99 Blue
          , Catastrophe 99 Green
          ]
 
   , Turn [ Catastrophe 99 Yellow
          , Sacrifice 234 (Piece Green Small)
-         , Attack 2 (Piece Yellow Small)
+         , Attack 2 (Ship 0 (Piece Yellow Small))
          , Catastrophe 99 Yellow
          ]
   ]
@@ -279,17 +279,30 @@ destinationId (Fresh pc)     = do
   guard =<< pieceInReserve pc
   createSystem (System (Single pc) [])
 
-findShipAt ∷ SystemId → (Ship → Bool) → Game Bool
-findShipAt sysId pred = do
-  sys ← getSystem sysId
-  return $ not $ null $ filter pred $ view ships sys
+shipsAt ∷ SystemId → (Ship → Bool) → Game [Ship]
+shipsAt loc pred = filter pred . view ships <$> getSystem loc
+
+shipsExistAt ∷ SystemId → (Ship → Bool) → Game Bool
+shipsExistAt loc  pred = not . null <$> shipsAt loc pred
 
 shipExistsAt ∷ SystemId → Ship → Game Bool
-shipExistsAt loc ship = findShipAt loc (== ship)
+shipExistsAt loc ship = shipsExistAt loc (== ship)
+
+shipSize ∷ Ship → Size
+shipSize = view (piece . size)
+
+biggestShip ∷ [Ship] → (Maybe Ship)
+biggestShip = safeHead . reverse . List.sortOn shipSize
+
+ourLargestShipAt ∷ SystemId → Game Ship
+ourLargestShipAt loc = do
+  us ← currentPlayer
+  mShip ← biggestShip <$> shipsAt loc (\ship → us == view owner ship)
+  lift $ toList mShip
 
 ownsAShipWith ∷ SystemId → PlayerId → Color → Game Bool
 ownsAShipWith loc player color =
-  findShipAt loc $ \(Ship owner (Piece c _)) →
+  shipsExistAt loc $ \(Ship owner (Piece c _)) →
     and [owner == player, c == color]
 
 homeWorld ∷ PlayerId → Game System
@@ -356,21 +369,37 @@ constructShip loc color = do
   size ← takeSmallestShipFromReserve color
   placeShip loc $ Ship player $ Piece color size
 
-moveShip ∷ SystemId → Piece → Destination → Game ()
-moveShip from pc dest = do
+attackShip ∷ SystemId → Ship → Game ()
+attackShip loc target = do
   player ← currentPlayer
-  let ship = Ship player pc
-  guard =<< actionAvailable from Yellow
+  guard =<< actionAvailable loc Red
+  guard =<< shipExistsAt loc target
+  guard $ view owner target /= player
+
+  attacker ← ourLargestShipAt loc
+  guard $ target^.piece.size <= attacker^.piece.size
+
+  deleteShip loc target
+  takePc (view piece target)
+  placeShip loc $ Ship player (view piece target)
+
+moveShip ∷ SystemId → Piece → Destination → Game ()
+moveShip loc pc dest = do
+  player ← currentPlayer
+  guard =<< actionAvailable loc Yellow
   to ← destinationId dest
-  guard =<< canMoveTo from to
-  deleteShip from ship
+  guard =<< canMoveTo loc to
+  let ship = Ship player pc
+  deleteShip loc ship
+  takePc (ship ^. piece)
   placeShip to ship
 
 applyAction ∷ Action → Game ()
 applyAction = \case
-  Construct s c   → constructShip s c
-  Move sys p dest → moveShip sys p dest
-  _               → undefined
+  Construct loc c   → constructShip loc c
+  Move loc p dest   → moveShip loc p dest
+  Attack loc target → attackShip loc target
+  _                 → undefined
 
 applyEvent ∷ Event → Game ()
 applyEvent ev = do
@@ -408,11 +437,19 @@ arbitraryMove = do
   dest ← arbitraryDestination
   return $ Move loc pc dest
 
+arbitraryAttack ∷ Game Action
+arbitraryAttack = do
+  loc    ← arbitrarySystem
+  pl     ← currentPlayer
+  sys    ← getSystem loc
+  target ← lift $ filter ((pl /=) . view owner) $ view ships sys
+  return $ Attack loc target
+
 arbitraryConstruction ∷ Game Action
 arbitraryConstruction = Construct <$> arbitrarySystem <*> lift enumeration
 
 arbitraryAction ∷ Game Action
-arbitraryAction = join $ lift [arbitraryMove, arbitraryConstruction]
+arbitraryAction = join $ lift [arbitraryMove, arbitraryConstruction, arbitraryAttack]
 
 arbitrarySetup ∷ Game Setup
 arbitrarySetup = do
@@ -477,7 +514,7 @@ main = do
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
 
-  let allFollowupStates = flip execStateT initial $ replicateM 8 performArbitraryAction
+  let allFollowupStates = flip execStateT initial $ replicateM 5 performArbitraryAction
 
   print (length allFollowupStates)
 
