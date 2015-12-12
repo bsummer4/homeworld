@@ -12,8 +12,8 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 import           Data.Char                  (toLower)
 import           Data.Foldable
 import qualified Data.List                  as List
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
+import           Data.IntMap.Strict         (IntMap)
+import qualified Data.IntMap.Strict         as IntMap
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Set                   as Set
@@ -38,16 +38,16 @@ safeHead = \case { [] → Nothing; x:_ → Just x }
 -- Initial States --------------------------------------------------------------------------------------------
 
 -- This is three rainbow stashes.
-startingDeck ∷ Map Piece Int
-startingDeck = Map.fromList $ do
+startingDeck ∷ IntMap Int
+startingDeck = IntMap.fromList $ do
   color <- enumeration
   size <- enumeration
-  return (Piece color size, 9)
+  return (fromEnum $ Piece color size, 9)
 
 emptyState ∷ GameSt
 emptyState = GameSt
   { _reserve    = startingDeck
-  , _systems    = Map.empty
+  , _systems    = IntMap.empty
   , _turn       = 0
   , _numSystems = 0
   , _numPlayers = 0
@@ -70,7 +70,7 @@ currentPlayer = view turn <$> get
 pieceAvailable ∷ Piece → MoveM Bool
 pieceAvailable pc = do
   st ← get
-  let inReserve = fromMaybe 0 $ Map.lookup pc $ st ^. reserve
+  let inReserve = fromMaybe 0 $ IntMap.lookup (fromEnum pc) $ st ^. reserve
   return (inReserve > 0)
 
 smallestAvailableSizeFor ∷ Color → MoveM Size
@@ -96,7 +96,7 @@ createSystem sys@(System star ships) = do
   st ← get
   let newId = st ^. numSystems
   modify $ set numSystems (newId + 1)
-  modify $ set systems (Map.insert newId sys (st ^. systems))
+  modify $ set systems (IntMap.insert newId sys (st ^. systems))
   return newId
 
 joinGame ∷ Setup → MoveM PlayerId
@@ -116,7 +116,7 @@ initialize = mapM_ joinGame
 getSystem ∷ SystemId → MoveM System
 getSystem sysId = do
   st ← get
-  lift $ Map.lookup sysId $ view systems st
+  lift $ IntMap.lookup sysId $ view systems st
 
 destinationId ∷ Destination → MoveM SystemId
 destinationId (Existing loc) = return loc
@@ -166,26 +166,26 @@ advanceTurn =
 
 placeShip ∷ SystemId → Ship → MoveM ()
 placeShip loc p = modify $ \st →
-  st & systems .~ Map.update f loc (st ^. systems)
+  st & systems .~ IntMap.update f loc (st ^. systems)
     where
       f sys = Just $ over ships (p:) sys
 
 pieceInReserve ∷ Piece → MoveM Bool
 pieceInReserve pc = do
   st ← get
-  inReserve ← lift $ Map.lookup pc (st ^. reserve)
+  inReserve ← lift $ IntMap.lookup (fromEnum pc) (st ^. reserve)
   return $ inReserve >= 1
 
 takePc ∷ Piece → MoveM ()
 takePc pc = do
   guard =<< pieceInReserve pc
-  modify $ over reserve $ flip Map.update pc $ Just . (+1)
+  modify $ over reserve $ flip IntMap.update (fromEnum pc) $ Just . (+1)
 
 deleteShip ∷ SystemId → Ship → MoveM ()
 deleteShip loc ship = do
   guard =<< shipExistsAt loc ship
   modify $ over systems
-         $ flip Map.update loc
+         $ flip IntMap.update loc
          $ Just . (over ships (List.delete ship))
 
 
@@ -304,7 +304,7 @@ systemStarColors loc = do
 
 -- TODO Add everything back to the bank.
 destroySystem ∷ SystemId → MoveM ()
-destroySystem = modify . over systems . Map.delete
+destroySystem = modify . over systems . IntMap.delete
 
 destroyStarsWithColor ∷ SystemId → Color → MoveM ()
 destroyStarsWithColor loc c = do
@@ -317,7 +317,7 @@ destroyStarsWithColor loc c = do
   case remaining of
     []  → destroySystem loc
     [p] → modify $ over systems
-                 $ flip Map.update loc
+                 $ flip IntMap.update loc
                  $ Just . set star (Single p)
 
 causeCatastrophe ∷ SystemId → Color → MoveM ()
@@ -335,7 +335,7 @@ causeCatastrophe loc c = do
 
 cleanup ∷ MoveM ()
 cleanup = do
-  sysIds ← Map.keys . view systems <$> get
+  sysIds ← IntMap.keys . view systems <$> get
   forM_ sysIds $ \loc → do
     docked ← view ships <$> getSystem loc
     when (null docked) $ destroySystem loc

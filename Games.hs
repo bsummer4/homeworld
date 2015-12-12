@@ -13,8 +13,6 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 import           Data.Char                  (toLower)
 import           Data.Foldable
 import qualified Data.List                  as List
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Set                   as Set

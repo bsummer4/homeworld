@@ -12,14 +12,13 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 import           Data.Char                  (toLower)
 import           Data.Foldable
 import qualified Data.List                  as List
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Set                   as Set
 import           Debug.Trace
 import           System.Random.Shuffle      (shuffleM)
 import           Text.Show.Pretty           (ppShow)
+import           Control.Monad.Random
 
 import           THUtils
 import           Types
@@ -55,7 +54,7 @@ main = do
         Games.joins
         Games.joins
 
-  initial ← head <$> shuffleM (take 100 allInitialStates)
+  initial ← fmap head $ flip evalRandT (mkStdGen 0) $ shuffleM $ take 10 allInitialStates
 
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
@@ -67,9 +66,9 @@ main = do
 
   print (length allFollowupStates)
 
-  someGames ← take 100 <$> shuffleM allFollowupStates
+  someGames ← take 100 <$> flip evalRandT (mkStdGen 0) (shuffleM allFollowupStates)
 
-  mapM_ (\x → print x >> putStrLn "") $ reverse <$> view history <$> someGames
+  -- mapM_ (\x → print x >> putStrLn "") $ reverse <$> view history <$> someGames
 
   executeEventLog $ reverse $ view history $ head someGames
 

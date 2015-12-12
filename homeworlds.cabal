@@ -31,4 +31,5 @@ executable homeworlds
     mtl,
     pretty-show,
     random-shuffle,
+    MonadRandom,
     transformers

@@ -15,8 +15,8 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 import           Data.Char                  (toLower)
 import           Data.Foldable
 import qualified Data.List                  as List
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
+import           Data.IntMap.Strict         (IntMap)
+import qualified Data.IntMap.Strict         as IntMap
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Set                   as Set
@@ -36,7 +36,7 @@ data Size = Small | Medium | Large
   deriving (Eq, Ord, Enum, Bounded)
 
 data Piece = Piece { _color ∷ !Color, _size ∷ !Size }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Bounded)
 
 data Ship = Ship { _owner ∷ !PlayerId, _piece ∷ !Piece }
   deriving (Eq, Ord)
@@ -45,29 +45,29 @@ data Star = Binary !Piece !Piece
           | Single !Piece
   deriving (Eq, Ord, Show)
 
-data System = System { _star ∷ Star, _ships ∷ [Ship] }
+data System = System { _star ∷ !Star, _ships ∷ ![Ship] }
   deriving (Eq, Ord, Show)
 
 type PlayerId = Int
 type SystemId = Int
 
-data GameSt = GameSt { _reserve    ∷ (Map Piece Int)
-                     , _systems    ∷ (Map SystemId System)
+data GameSt = GameSt { _reserve    ∷ !(IntMap Int)
+                     , _systems    ∷ !(IntMap System)
                      , _turn       ∷ !PlayerId
                      , _numSystems ∷ !Int
                      , _numPlayers ∷ !Int
-                     , _history    ∷ [Event]
+                     , _history    ∷ ![Event]
                      }
   deriving (Eq, Ord, Show)
 
 
 -- Events ----------------------------------------------------------------------------------------------------
 
-data Setup = Setup Piece Piece Color
+data Setup = Setup !Piece !Piece !Color
   deriving (Eq, Ord, Show)
 
-data Destination = Existing SystemId
-                 | Fresh Piece
+data Destination = Existing !SystemId
+                 | Fresh !Piece
   deriving (Eq, Ord, Show)
 
 data Action = Construct !SystemId !Color
@@ -93,23 +93,31 @@ type GameM = GameT []
 
 -- Instances -------------------------------------------------------------------------------------------------
 
-intMapList ∷ Map Int a → [Maybe a]
-intMapList m | Map.null m = []
-intMapList m              = Map.findMax m & \case
-  (k,_) → flip Map.lookup m <$> [0..k]
+intMapList ∷ IntMap a → [Maybe a]
+intMapList m | IntMap.null m = []
+intMapList m              = IntMap.findMax m & \case
+  (k,_) → flip IntMap.lookup m <$> [0..k]
+
+numberOfSizes ∷ Int
+numberOfSizes = 1 + fromEnum (maxBound ∷ Size)
+
+instance Enum Piece where
+  enumFrom pc = enumFromTo pc maxBound
+  enumFromThen pc pc2 = enumFromThenTo pc pc2 maxBound
+  fromEnum (Piece pc sz) = fromEnum sz + (fromEnum pc * numberOfSizes)
+  toEnum i = Piece pc sz
+    where sz = toEnum $ i `mod` numberOfSizes
+          pc = toEnum $ i `div` numberOfSizes
+
 
 instance Show Color where show = \case { Red → "r"; Green → "g"; Blue → "b"; Yellow → "y" }
 instance Show Size where show = \case { Small → "1"; Medium → "2"; Large → "3" }
 instance Show Piece where show (Piece color size) = show color <> show size
 instance Show Ship where show (Ship player piece) = "\"" <> show piece <> "@" <> show player <> "\""
-instance A.ToJSON v => A.ToJSON (Map Int v) where toJSON = A.toJSON . intMapList
-instance A.FromJSON v => A.FromJSON (Map Int v) where parseJSON v = Map.fromList <$> A.parseJSON v
 instance A.ToJSON Color where toJSON = A.toJSON . show
 instance A.FromJSON Color where parseJSON = undefined
 instance A.ToJSON Piece where toJSON = A.toJSON . show
 instance A.FromJSON Piece where parseJSON = undefined
-instance A.ToJSON v => A.ToJSON (Map Piece v) where toJSON = A.toJSON . Map.mapKeys show
-instance A.FromJSON v => A.FromJSON (Map Piece v) where parseJSON v = undefined -- Map.fromList <$> A.parseJSON v
 
 makeLenses ''Piece
 makeLenses ''Ship
