@@ -46,15 +46,29 @@ executeEventLog = loop emptyState
             Nothing  → putStrLn "Invalid move! aborting."
             Just st' → loop st' es
 
+initialStates ∷ Int → IO [GameSt]
+initialStates n = flip evalRandT (mkStdGen 0) $ shuffleM $ take n $ execGame openings
+  where execGame = flip execStateT emptyState
+        openings = Games.joins >> Games.joins
+
+followUps ∷ GameSt → Int → [GameSt]
+followUps initial depth = execGame (replicateM depth Games.simpleActionSeqs)
+  where execGame = flip execStateT initial
+
+showNumGames ∷ [GameSt] → IO ()
+showNumGames gms = print (length gms)
+
+showSomeGames ∷ [GameSt] → IO ()
+showSomeGames theGames = do
+  someOfThem ← take 100 <$> flip evalRandT (mkStdGen 0) (shuffleM theGames)
+  -- mapM_ (\x → print x >> putStrLn "") $ reverse <$> view history <$> someOfThem
+  executeEventLog $ reverse $ view history $ head someOfThem
+
 main ∷ IO ()
 main = do
   LBS8.putStrLn $ A.encode exampleGame
 
-  let allInitialStates = flip execStateT emptyState $ do
-        Games.joins
-        Games.joins
-
-  initial ← fmap head $ flip evalRandT (mkStdGen 0) $ shuffleM $ take 10 allInitialStates
+  initial ← head <$> initialStates 10
 
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
@@ -62,15 +76,10 @@ main = do
   putStrLn "How deep should we go?"
   depth ← read <$> getLine
 
-  let allFollowupStates = flip execStateT initial $ replicateM depth Games.simpleActionSeqs
+  let allFollowupStates = followUps initial depth
+  showNumGames allFollowupStates
+  showSomeGames allFollowupStates
 
-  print (length allFollowupStates)
-
-  someGames ← take 100 <$> flip evalRandT (mkStdGen 0) (shuffleM allFollowupStates)
-
-  -- mapM_ (\x → print x >> putStrLn "") $ reverse <$> view history <$> someGames
-
-  executeEventLog $ reverse $ view history $ head someGames
 
 
 -- Example Games ---------------------------------------------------------------------------------------------
