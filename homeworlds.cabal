@@ -15,15 +15,15 @@ executable homeworlds
   other-modules:       GamePrelude GameTree HWGame HWMove RunTTT Setup TTT TTTMove Types
 
   default-extensions:
+    DeriveFoldable
+    DeriveTraversable
     FlexibleInstances
     LambdaCase
     NoImplicitPrelude
     ScopedTypeVariables
     TemplateHaskell
-    UnicodeSyntax
     TupleSections
-    DeriveFoldable
-    DeriveTraversable
+    UnicodeSyntax
 
   build-depends:
     aeson,

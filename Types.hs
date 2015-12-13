@@ -53,7 +53,7 @@ type SystemId = Int
 
 data GameSt = GameSt { _reserve    ∷ !(IntMap Int)
                      , _systems    ∷ !(IntMap System)
-                     , _turn       ∷ !PlayerId
+                     , _playerToMv ∷ !PlayerId
                      , _numSystems ∷ !Int
                      , _numPlayers ∷ !Int
                      }

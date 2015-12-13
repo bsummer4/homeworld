@@ -45,8 +45,8 @@ destinations = do
 moves ∷ HWGame Action
 moves = do
   loc  ← systems
-  pl   ← fromMove currentPlayer
-  sys  ← fromMove (getSystem loc)
+  pl   ← fromMove (use playerToMv)
+  sys  ← fromMove (lookupSystem loc)
   pc   ← lift $ map (view piece) $ filter ((pl ==) . view owner) $ view ships sys
   dest ← destinations
   return $ Move loc pc dest
@@ -54,16 +54,16 @@ moves = do
 attacks ∷ HWGame Action
 attacks = do
   loc    ← systems
-  pl     ← fromMove currentPlayer
-  sys    ← fromMove (getSystem loc)
+  pl     ← fromMove (use playerToMv)
+  sys    ← fromMove (lookupSystem loc)
   target ← lift $ filter ((pl /=) . view owner) $ view ships sys
   return $ Attack loc target
 
 trades ∷ HWGame Action
 trades = do
   loc    ← systems
-  sys    ← fromMove (getSystem loc)
-  pl     ← fromMove currentPlayer
+  sys    ← fromMove (lookupSystem loc)
+  pl     ← fromMove (use playerToMv)
   target ← lift $ filter ((pl ==) . view owner) $ view ships sys
   color  ← lift $ filter (/= target^.piece.color) enumeration
   return $ Trade loc (target ^. piece) color
@@ -82,8 +82,8 @@ catastrophes = do
 sacrifices ∷ HWGame Action
 sacrifices = do
   loc    ← systems
-  sys    ← fromMove (getSystem loc)
-  pl     ← fromMove currentPlayer
+  sys    ← fromMove (lookupSystem loc)
+  pl     ← fromMove (use playerToMv)
   target ← lift $ filter ((pl ==) . view owner) $ view ships sys
   return $ Sacrifice loc (target ^. piece)
 
