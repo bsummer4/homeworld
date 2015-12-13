@@ -1,32 +1,14 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-module HWMove where
+module Homeworlds.Move where
 
-import           GamePrelude
+import Core
+import Homeworlds.Types
 
-import           Control.Lens
-import           Control.Lens.TH
-import           Control.Monad
-import           Control.Monad.List
 import           Control.Monad.State.Lazy
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Maybe
-import qualified Data.Aeson                 as A
-import qualified Data.ByteString.Lazy.Char8 as LBS8
-import           Data.Char                  (toLower)
-import           Data.Foldable
-import qualified Data.List                  as List
-import           Data.IntMap.Strict         (IntMap)
-import qualified Data.IntMap.Strict         as IntMap
-import           Data.Maybe
-import           Data.Monoid
-import qualified Data.Set                   as Set
-import           Debug.Trace
-import           System.Random.Shuffle      (shuffleM)
-import           Text.Show.Pretty           (ppShow)
-
-import Types
+import qualified Data.IntMap.Strict       as IntMap
+import qualified Data.List                as List
 
 
 -- Initial States --------------------------------------------------------------------------------------------
@@ -34,14 +16,14 @@ import Types
 -- This is three rainbow stashes.
 startingDeck ∷ IntMap Int
 startingDeck = IntMap.fromList $ do
-  color <- enumeration
-  size <- enumeration
-  return (fromEnum $ Piece color size, 9)
+  colr <- enumeration
+  sz <- enumeration
+  return (fromEnum $ Piece colr sz, 9)
 
 emptyState ∷ GameSt
 emptyState = GameSt
   { _reserve    = startingDeck
-  , _systems    = IntMap.empty
+  , _systems    = mempty
   , _playerToMv = 0
   , _numSystems = 0
   , _numPlayers = 0
@@ -93,7 +75,7 @@ grabShip ∷ Ship → HWMove Ship
 grabShip ship = grabPc (ship ^. piece) >> return ship
 
 grabStar ∷ Star → HWMove Star
-grabStar star = mapM_ grabPc (starMakeup star) >> return star
+grabStar theStar = mapM_ grabPc (starMakeup theStar) >> return theStar
 
 grabSmallestShipFromReserve ∷ Color → HWMove Piece
 grabSmallestShipFromReserve c = do
@@ -101,9 +83,9 @@ grabSmallestShipFromReserve c = do
   grabPc (Piece c sz)
 
 grabSystem ∷ System → HWMove SystemId
-grabSystem sys@(System star ships) = do
-  grabStar star
-  mapM_ grabShip ships
+grabSystem sys = do
+  _ ← grabStar (sys ^. star)
+  mapM_ grabShip (sys ^. ships)
   newId ← use numSystems
   numSystems         .= (newId + 1)
   systems . ix newId .= sys
@@ -126,7 +108,7 @@ grabOrLookupDestination = \case
 joinGame ∷ Setup → HWMove PlayerId
 joinGame (Setup s1 s2 c) = do
   playerId ← grabPlayer
-  grabSystem $ System (Binary s1 s2) [Ship playerId (Piece c Large)]
+  _ ← grabSystem $ System (Binary s1 s2) [Ship playerId (Piece c Large)]
   return playerId
 
 
@@ -138,17 +120,17 @@ lookupSystem loc = do
   lift mSys
 
 shipsAt ∷ SystemId → (Ship → Bool) → HWMove [Ship]
-shipsAt loc pred = do
+shipsAt loc f = do
   sys ← lookupSystem loc
-  return $ filter pred (sys ^. ships)
+  return $ filter f (sys ^. ships)
 
 piecesAt ∷ SystemId → (Piece → Bool) → HWMove [Piece]
-piecesAt loc pred = do
+piecesAt loc f = do
   sys ← lookupSystem loc
-  return $ filter pred $ systemPieces sys
+  return $ filter f $ systemPieces sys
 
 shipsExistAt ∷ SystemId → (Ship → Bool) → HWMove Bool
-shipsExistAt loc pred = not . null <$> shipsAt loc pred
+shipsExistAt loc f = not . null <$> shipsAt loc f
 
 shipExistsAt ∷ SystemId → Ship → HWMove Bool
 shipExistsAt loc ship = shipsExistAt loc (== ship)
@@ -166,9 +148,9 @@ ourLargestShipAt loc = do
   lift mShip
 
 ownsAShipWith ∷ SystemId → PlayerId → Color → HWMove Bool
-ownsAShipWith loc player color =
-  shipsExistAt loc $ \(Ship owner (Piece c _)) →
-    and [owner == player, c == color]
+ownsAShipWith loc player colr =
+  shipsExistAt loc $ \(Ship ownr (Piece c _)) →
+    and [ownr == player, c == colr]
 
 homeWorld ∷ PlayerId → HWMove System
 homeWorld = lookupSystem
@@ -205,15 +187,15 @@ validActionSequence = checkValid
     checkValid ∷ [Action] → Bool
     checkValid = \case
       []                       → False
-      Construct _ _     : more → all isCatastrophe more
-      Move _ _ _        : more → all isCatastrophe more
-      Attack _ _        : more → all isCatastrophe more
-      Trade _ _ _       : more → all isCatastrophe more
-      s@(Sacrifice l p) : more → checkSacrifice (p^.color) (piecePower p) more
-      Catastrophe _ _   : more → validActionSequence more
+      Construct _ _    : more → all isCatastrophe more
+      Move _ _ _       : more → all isCatastrophe more
+      Attack _ _       : more → all isCatastrophe more
+      Trade _ _ _      : more → all isCatastrophe more
+      Sacrifice _ p    : more → checkSacrifice (p^.color) (piecePower p) more
+      Catastrophe _ _  : more → validActionSequence more
 
     checkSacrifice ∷ Color → Int → [Action] → Bool
-    checkSacrifice c 0     = all isCatastrophe
+    checkSacrifice _ 0     = all isCatastrophe
     checkSacrifice c power = \case
       []                     → False
       Catastrophe _ _ : more → checkSacrifice c power more
@@ -240,17 +222,17 @@ canTeleportBetween sys1 sys2 =
   noneEqual $ map (view size) $ concat $ map (starMakeup . view star) [sys1,sys2]
 
 canMoveTo ∷ SystemId → SystemId → HWMove Bool
-canMoveTo from to =
-  if from == to
+canMoveTo start dest =
+  if start == dest
     then return False
-    else canTeleportBetween <$> lookupSystem from <*> lookupSystem to
+    else canTeleportBetween <$> lookupSystem start <*> lookupSystem dest
 
 constructShip ∷ SystemId → Color → HWMove ()
-constructShip loc color = do
+constructShip loc colr = do
   player ← use playerToMv
-  guard =<< ownsAShipWith loc player color
-  guard =<< actionAvailable loc color
-  pc ← grabSmallestShipFromReserve color
+  guard =<< ownsAShipWith loc player colr
+  guard =<< actionAvailable loc colr
+  pc ← grabSmallestShipFromReserve colr
   placeShip loc $ Ship player pc
 
 attackShip ∷ SystemId → Ship → HWMove ()
@@ -264,7 +246,7 @@ attackShip loc target = do
   guard $ target^.piece.size <= attacker^.piece.size
 
   deleteShip loc target
-  grabPc (view piece target)
+  _ ← grabPc (view piece target)
   placeShip loc $ Ship player (view piece target)
 
 tradeShip ∷ SystemId → Piece → Color → HWMove ()
@@ -275,7 +257,7 @@ tradeShip loc pc newColor = do
   guard =<< shipExistsAt loc oldShip
   let newShip = set (piece . color) newColor oldShip
   deleteShip loc oldShip
-  grabPc (newShip ^. piece)
+  _ ← grabPc (newShip ^. piece)
   placeShip loc newShip
 
 sacrificeShip ∷ SystemId → Piece → HWMove ()
@@ -289,12 +271,12 @@ moveShip ∷ SystemId → Piece → Destination → HWMove ()
 moveShip loc pc dest = do
   player ← use playerToMv
   guard =<< actionAvailable loc Yellow
-  to ← grabOrLookupDestination dest
-  guard =<< canMoveTo loc to
+  destId ← grabOrLookupDestination dest
+  guard =<< canMoveTo loc destId
   let ship = Ship player pc
   deleteShip loc ship
-  grabPc (ship ^. piece)
-  placeShip to ship
+  _ ← grabPc (ship ^. piece)
+  placeShip destId ship
 
 systemStarColors ∷ SystemId → HWMove [Color]
 systemStarColors loc = do
@@ -314,10 +296,11 @@ destroyStarsWithColor loc c = do
 
   guard $ length starPieces /= length remaining
   case remaining of
-    []  → destroySystem loc
-    [p] → modify $ over systems
-                 $ flip IntMap.update loc
-                 $ Just . set star (Single p)
+    (_:_:_) → error "This will never happen"
+    []      → destroySystem loc
+    [p]     → modify $ over systems
+                     $ flip IntMap.update loc
+                     $ Just . set star (Single p)
 
 causeCatastrophe ∷ SystemId → Color → HWMove ()
 causeCatastrophe loc c = do
@@ -347,7 +330,7 @@ applyAction act = do
     Attack      loc target   → attackShip loc target
     Trade       loc target c → tradeShip loc target c
     Sacrifice   loc target   → sacrificeShip loc target
-    Catastrophe loc color    → causeCatastrophe loc color
+    Catastrophe loc colr     → causeCatastrophe loc colr
   cleanup
 
 applyEvent ∷ Event → HWMove Event

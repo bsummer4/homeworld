@@ -1,55 +1,44 @@
 module Main where
 
-import           GamePrelude
+import           Core
+import           Game.Tree
+import qualified Homeworlds.Game  as HW
+import qualified Homeworlds.Move  as HW
+import           Homeworlds.Types as HW
+import qualified TTT.Main         as TTT
 
-import           Control.Lens
-import           Control.Lens.TH
-import           Control.Monad
-import           Control.Monad.List
+import           Control.Monad.Random
 import           Control.Monad.State.Lazy
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Maybe
 import qualified Data.Aeson                 as A
 import qualified Data.ByteString.Lazy.Char8 as LBS8
-import           Data.Char                  (toLower)
-import           Data.Foldable
-import qualified Data.List                  as List
-import           Data.Maybe
-import           Data.Monoid
-import qualified Data.Set                   as Set
-import           Debug.Trace
 import           System.Random.Shuffle      (shuffleM)
-import           Text.Show.Pretty           (ppShow)
-import           Control.Monad.Random
-
-import           Types
-import           HWMove
-import qualified HWGame
-import           GameTree
 
 
 -- Tie it all together. --------------------------------------------------------------------------------------
 
 initialStates ∷ Int → IO [GameSt]
 initialStates n = flip evalRandT (mkStdGen 0) $ shuffleM $ take n $ execGame openings
-  where execGame = flip execStateT emptyState
-        openings = HWGame.joins >> HWGame.joins
+  where execGame = flip execStateT HW.emptyState
+        openings = HW.joins >> HW.joins
 
 main ∷ IO ()
 main = do
+  TTT.main
+
   LBS8.putStrLn $ A.encode exampleGame
   initial ← head <$> initialStates 10
   putStrLn "INITIAL STATE"
-  putStrLn $ ppShow initial
+  putStrLn $ cs $ ppShow initial
 
   putStrLn "SOME GAME"
-  mapM_ print $ take 2 $ gameStates $ gameTree initial HWGame.turns
+  mapM_ print $ take 2 $ gameStates $ gameTree initial HW.turns
 
-  printTrace (view systems) $ dumbTrace $ gameTree initial HWGame.turns
+  printTrace (view systems) $ dumbTrace $ gameTree initial HW.turns
 
 
 -- Example Games ---------------------------------------------------------------------------------------------
 
+exampleGame ∷ [Event]
 exampleGame =
   [ Join (Setup (Piece Red Small) (Piece Green Medium) Blue)
   , Join (Setup (Piece Red Small) (Piece Green Medium) Yellow)

@@ -1,37 +1,18 @@
-module HWGame where
+module Homeworlds.Game where
 
-import GamePrelude
+import Core
+import Homeworlds.Move
+import Homeworlds.Types hiding (systems)
 
-import           Control.Lens
-import           Control.Lens.TH
-import           Control.Monad
-import           Control.Monad.List
-import           Control.Monad.Morph        (hoist)
-import           Control.Monad.State.Lazy
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Maybe
-import qualified Data.Aeson                 as A
-import qualified Data.ByteString.Lazy.Char8 as LBS8
-import           Data.Char                  (toLower)
-import           Data.Foldable
-import qualified Data.List                  as List
-import           Data.Maybe
-import           Data.Monoid
-import qualified Data.Set                   as Set
-import           Debug.Trace
-import           System.Random.Shuffle      (shuffleM)
-import           Text.Show.Pretty           (ppShow)
-
-import Types hiding (systems)
-import HWMove
+import Control.Monad.State.Lazy
 
 
 -- General Utilities -----------------------------------------------------------------------------------------
 
 systems ∷ HWGame SystemId
 systems = do
-  numSystems ← view numSystems <$> get
-  lift [0 .. numSystems-1]
+  n ← use numSystems
+  lift [0 .. n-1]
 
 pieces ∷ HWGame Piece
 pieces = Piece <$> lift enumeration <*> lift enumeration
@@ -65,8 +46,8 @@ trades = do
   sys    ← fromMove (lookupSystem loc)
   pl     ← fromMove (use playerToMv)
   target ← lift $ filter ((pl ==) . view owner) $ view ships sys
-  color  ← lift $ filter (/= target^.piece.color) enumeration
-  return $ Trade loc (target ^. piece) color
+  colr   ← lift $ filter (/= target^.piece.color) enumeration
+  return $ Trade loc (target ^. piece) colr
 
 constructions ∷ HWGame Action
 constructions = Construct <$> systems <*> lift enumeration
@@ -94,11 +75,11 @@ simpleActionSeqs ∷ HWGame [Action]
 simpleActionSeqs = do
   action ← join $ lift [actions, sacrifices]
   case action of
-    Sacrifice loc pc → fmap (action:) $ replicateM (piecePower pc) $ case (view color pc) of
-                           Red    → attacks
-                           Green  → constructions
-                           Blue   → trades
-                           Yellow → moves
+    Sacrifice _loc pc → fmap (action:) $ replicateM (piecePower pc) $ case (view color pc) of
+      Red    → attacks
+      Green  → constructions
+      Blue   → trades
+      Yellow → moves
     _                → return [action]
 
 actionSeqs ∷ HWGame [Action]

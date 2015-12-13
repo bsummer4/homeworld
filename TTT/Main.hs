@@ -1,22 +1,14 @@
-module RunTTT where
+module TTT.Main where
 
-import GamePrelude
+import Core
+import Game.Tree
+import TTT.Move
+import TTT.Types
 
-import           Control.Monad.State.Lazy
-import           Data.Foldable            (length, toList)
-import           Data.List                (foldl')
-import           Data.Map                 (Map)
-import qualified Data.Map                 as Map
-import           Data.Maybe
-import           Data.Tree                as Tree
-import           Data.Tree                (Tree, Forest)
-import           System.Random.Shuffle    (shuffleM)
-
-import TTT
-import TTTMove
-import GameTree
+import Control.Monad.State.Lazy
 
 
+fromMove ∷ Move GameSt a → Game GameSt a
 fromMove = hoist toList
 
 moves ∷ TTTGame Event
@@ -24,19 +16,20 @@ moves = do
   fromMove assertNoWinner
   x ← lift [0..2]
   y ← lift [0..2]
-  let e = Place x y
-  fromMove $ place (x,y)
+  let e = Place (Tile x y)
+  fromMove $ place (Tile x y)
   return e
 
 
 -- Tie it all together ---------------------------------------------------------------------------------------
 
-someArbitraryState ∷ TTTSt
+someArbitraryState ∷ GameSt
 Just someArbitraryState = flip execStateT initialState $ do
-    place (1,1)
-    place (0,0)
-    place (1,0)
+    place (Tile 1 1)
+    place (Tile 0 0)
+    place (Tile 1 0)
 
+main ∷ IO ()
 main = do
     randomGame (gameTree initialState moves) >>= \case
         Trace initialSt history → do

@@ -1,0 +1,32 @@
+columns: 110
+steps:
+  - imports:
+      align: group
+  - language_pragmas:
+      style: compact_line
+      remove_redundant: true
+  - records: {}
+  - tabs:
+      spaces: 4
+  - trailing_whitespace: {}
+language_extensions:
+  - BangPatterns
+  - ConstraintKinds
+  - ExistentialQuantification
+  - FlexibleContexts
+  - FlexibleInstances
+  - FunctionalDependencies
+  - GADTs
+  - GeneralizedNewtypeDeriving
+  - LambdaCase
+  - MultiParamTypeClasses
+  - MultiWayIf
+  - NamedFieldPuns
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - RecordWildCards
+  - StandaloneDeriving
+  - TupleSections
+  - TypeFamilies
+  - TypeSynonymInstances
+  - ViewPatterns

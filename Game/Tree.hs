@@ -1,16 +1,10 @@
-module GameTree where
+module Game.Tree where
 
-import GamePrelude
+import Core hiding (below, children, init, pred)
 
-import           Control.Monad.State.Lazy
-import           Data.Foldable            (length, toList)
-import           Data.List                (foldl')
-import           Data.Map                 (Map)
-import qualified Data.Map                 as Map
-import           Data.Maybe
-import           Data.Tree                as Tree
-import           Data.Tree                (Tree(Node), Forest)
-import           System.Random.Shuffle    (shuffleM)
+import Control.Monad.State.Lazy
+import Data.Tree                as Tree
+import System.Random.Shuffle    (shuffleM)
 
 
 
@@ -79,7 +73,7 @@ randomActor (GameTree _ elems) = fmap f . safeHead <$> shuffleM elems
     f (Node (e, st) forest) = (e, GameTree st forest)
 
 interleaveActs ∷ [Actor m e st] -> IO (Actor m e st)
-interleaveActs actors = undefined
+interleaveActs _actors = undefined
 
 humanActor ∷ (Show e, Show st) => ActorIO e st
 humanActor = undefined
@@ -103,22 +97,22 @@ printTraceHistory tr@(Trace init _) = do
     print e
 
 printTrace ∷ (Show e, Show a) ⇒ (st → a) → GameTrace e st → IO ()
-printTrace disp tr@(Trace init happenings) = do
+printTrace disp (Trace init happenings) = do
   putStrLn "INITIAL"
-  putStrLn (ppShow (disp init))
+  pprint (disp init)
   putStrLn ""
   forM_ (zip [0..] happenings) $ \(n,(e,st)) → do
-    putStrLn ("Move #" <> show n)
+    putStrLn ("Move #" <> show (n∷Int))
     putStrLn (show e)
     putStrLn "->"
-    putStrLn (ppShow (disp st))
+    pprint (disp st)
     putStrLn ""
 
 traceTake ∷ Int → GameTrace e st → GameTrace e st
 traceTake n (Trace st hist) = Trace st (take n hist)
 
 playGame ∷ Monad m => Actor m e st → GameTree e st → m (GameTrace e st)
-playGame actor initial@(GameTree initialState _) = Trace initialState <$> loop initial
+playGame actor init@(GameTree initialState _) = Trace initialState <$> loop init
   where
     loop tr = do
       actor tr >>= \case
@@ -132,7 +126,7 @@ randomGame ∷ GameTree e st -> IO (GameTrace e st)
 randomGame = playGame randomActor
 
 dumbTrace ∷ ∀e st. GameTree e st → GameTrace e st
-dumbTrace top@(GameTree init children) = traceTake 100 $ Trace init $ loop children
+dumbTrace (GameTree init children) = traceTake 100 $ Trace init $ loop children
   where loop ∷ [Tree (e,st)] → [(e,st)]
         loop = \case []                    → []
                      Node (e,st) below : _ → (e,st) : loop below

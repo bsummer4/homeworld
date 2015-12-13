@@ -1,30 +1,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
-module Types where
+module Homeworlds.Types where
 
-import           GamePrelude
+import Core
+import Game.Tree
 
-import           Control.Lens
-import           Control.Lens.TH
-import           Control.Monad
-import           Control.Monad.List
-import           Control.Monad.State.Lazy
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Maybe
-import qualified Data.Aeson                 as A
-import qualified Data.ByteString.Lazy.Char8 as LBS8
-import           Data.Char                  (toLower)
-import           Data.Foldable
-import qualified Data.List                  as List
-import           Data.IntMap.Strict         (IntMap)
-import qualified Data.IntMap.Strict         as IntMap
-import           Data.Maybe
-import           Data.Monoid
-import qualified Data.Set                   as Set
-import           Debug.Trace
-import           System.Random.Shuffle      (shuffleM)
-import           Text.Show.Pretty           (ppShow)
+import qualified Data.Aeson         as A
+import qualified Data.IntMap.Strict as IntMap
+import qualified Text.Show          as Show
 
 
 -- Game State ------------------------------------------------------------------------------------------------
@@ -83,11 +67,11 @@ data Event = Join !Setup
   deriving (Eq, Ord, Show)
 
 
--- The Game and Move Monads ----------------------------------------------------------------------------------
+-- Moves, Games, and GameTrees -------------------------------------------------------------------------------
 
-type HomeworldT = StateT GameSt
-type HWMove = HomeworldT Maybe
-type HWGame = HomeworldT []
+type HWMove = Move GameSt
+type HWGame = Game GameSt
+type HWTree = GameTree Event GameSt
 
 
 -- Instances -------------------------------------------------------------------------------------------------
@@ -111,11 +95,11 @@ instance Enum Piece where
 
 instance Show Color where show = \case { Red → "r"; Green → "g"; Blue → "b"; Yellow → "y" }
 instance Show Size where show = \case { Small → "1"; Medium → "2"; Large → "3" }
-instance Show Piece where show (Piece color size) = show color <> show size
-instance Show Ship where show (Ship player piece) = "\"" <> show piece <> "@" <> show player <> "\""
-instance A.ToJSON Color where toJSON = A.toJSON . show
+instance Show Piece where show (Piece color size) = Show.show color <> Show.show size
+instance Show Ship where show (Ship player piece) = "\"" <> Show.show piece <> "@" <> Show.show player <> "\""
+instance A.ToJSON Color where toJSON = A.toJSON . Show.show
 instance A.FromJSON Color where parseJSON = undefined
-instance A.ToJSON Piece where toJSON = A.toJSON . show
+instance A.ToJSON Piece where toJSON = A.toJSON . Show.show
 instance A.FromJSON Piece where parseJSON = undefined
 
 makeLenses ''Piece

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -e
+
+stack setup
+stack build --only-snapshot
+
+export STACK_YAML=stack.ghcjs.yaml
+stack setup
+stack build --only-snapshot
