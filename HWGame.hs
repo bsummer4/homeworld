@@ -1,4 +1,6 @@
-module Games where
+module HWGame where
+
+import GamePrelude
 
 import           Control.Lens
 import           Control.Lens.TH
@@ -21,26 +23,26 @@ import           System.Random.Shuffle      (shuffleM)
 import           Text.Show.Pretty           (ppShow)
 
 import Types hiding (systems)
-import Moves
+import HWMove
 
 
 -- General Utilities -----------------------------------------------------------------------------------------
 
-systems ∷ GameM SystemId
+systems ∷ HWGame SystemId
 systems = do
   numSystems ← view numSystems <$> get
   lift [0 .. numSystems-1]
 
-pieces ∷ GameM Piece
+pieces ∷ HWGame Piece
 pieces = Piece <$> lift enumeration <*> lift enumeration
 
-destinations ∷ GameM Destination
+destinations ∷ HWGame Destination
 destinations = do
   freshDest ← lift [True, False]
   if freshDest then Fresh    <$> pieces
                else Existing <$> systems
 
-moves ∷ GameM Action
+moves ∷ HWGame Action
 moves = do
   loc  ← systems
   pl   ← fromMove currentPlayer
@@ -49,7 +51,7 @@ moves = do
   dest ← destinations
   return $ Move loc pc dest
 
-attacks ∷ GameM Action
+attacks ∷ HWGame Action
 attacks = do
   loc    ← systems
   pl     ← fromMove currentPlayer
@@ -57,7 +59,7 @@ attacks = do
   target ← lift $ filter ((pl /=) . view owner) $ view ships sys
   return $ Attack loc target
 
-trades ∷ GameM Action
+trades ∷ HWGame Action
 trades = do
   loc    ← systems
   sys    ← fromMove (getSystem loc)
@@ -66,10 +68,10 @@ trades = do
   color  ← lift $ filter (/= target^.piece.color) enumeration
   return $ Trade loc (target ^. piece) color
 
-constructions ∷ GameM Action
+constructions ∷ HWGame Action
 constructions = Construct <$> systems <*> lift enumeration
 
-catastrophes ∷ GameM Action
+catastrophes ∷ HWGame Action
 catastrophes = do
   loc     ← systems
   c       ← lift enumeration
@@ -77,7 +79,7 @@ catastrophes = do
   guard $ length targets >= 4
   return (Catastrophe loc c)
 
-sacrifices ∷ GameM Action
+sacrifices ∷ HWGame Action
 sacrifices = do
   loc    ← systems
   sys    ← fromMove (getSystem loc)
@@ -85,7 +87,10 @@ sacrifices = do
   target ← lift $ filter ((pl ==) . view owner) $ view ships sys
   return $ Sacrifice loc (target ^. piece)
 
-simpleActionSeqs ∷ GameM [Action]
+actions ∷ HWGame Action
+actions = join $ lift [moves, constructions, attacks, trades]
+
+simpleActionSeqs ∷ HWGame [Action]
 simpleActionSeqs = do
   action ← join $ lift [actions, sacrifices]
   case action of
@@ -96,17 +101,14 @@ simpleActionSeqs = do
                            Yellow → moves
     _                → return [action]
 
-actionSeqs ∷ GameM [Action]
+actionSeqs ∷ HWGame [Action]
 actionSeqs = do
   let possibleCatastrophes = evalStateT catastrophes <$> get
   possibleCatastrophes >>= \case
     []   → simpleActionSeqs
     evil → (evil ++) <$> simpleActionSeqs -- TODO
 
-actions ∷ GameM Action
-actions = join $ lift [moves, constructions, attacks, trades]
-
-setup ∷ GameM Setup
+setup ∷ HWGame Setup
 setup = do
   p1 ← pieces
   p2 ← pieces
@@ -124,11 +126,11 @@ setup = do
 
 -- Execute Arbitrary Actions ---------------------------------------------------------------------------------
 
-joins ∷ GameM ()
+joins ∷ HWGame Event
 joins = setup >>= fromMove . applyEvent . Join
 
-turns ∷ GameM ()
+turns ∷ HWGame Event
 turns = actionSeqs >>= fromMove . applyEvent . Turn
 
-fromMove ∷ MoveM a → GameM a
+fromMove ∷ HWMove a → HWGame a
 fromMove = hoist toList

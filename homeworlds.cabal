@@ -12,14 +12,18 @@ executable homeworlds
   main-is:             Main.hs
   default-language:    Haskell2010
   ghc-options:         -O2
-  other-modules:       Games Moves THUtils Types
+  other-modules:       GamePrelude GameTree HWGame HWMove RunTTT Setup TTT TTTMove Types
+
   default-extensions:
     FlexibleInstances
     LambdaCase
+    NoImplicitPrelude
     ScopedTypeVariables
     TemplateHaskell
     UnicodeSyntax
     TupleSections
+    DeriveFoldable
+    DeriveTraversable
 
   build-depends:
     aeson,
@@ -28,8 +32,8 @@ executable homeworlds
     containers,
     lens,
     mmorph,
+    MonadRandom,
     mtl,
     pretty-show,
     random-shuffle,
-    MonadRandom,
     transformers

@@ -3,6 +3,8 @@
 
 module Types where
 
+import           GamePrelude
+
 import           Control.Lens
 import           Control.Lens.TH
 import           Control.Monad
@@ -23,8 +25,6 @@ import qualified Data.Set                   as Set
 import           Debug.Trace
 import           System.Random.Shuffle      (shuffleM)
 import           Text.Show.Pretty           (ppShow)
-
-import           THUtils
 
 
 -- Game State ------------------------------------------------------------------------------------------------
@@ -56,7 +56,6 @@ data GameSt = GameSt { _reserve    ∷ !(IntMap Int)
                      , _turn       ∷ !PlayerId
                      , _numSystems ∷ !Int
                      , _numPlayers ∷ !Int
-                     , _history    ∷ ![Event]
                      }
   deriving (Eq, Ord, Show)
 
@@ -86,9 +85,9 @@ data Event = Join !Setup
 
 -- The Game and Move Monads ----------------------------------------------------------------------------------
 
-type GameT = StateT GameSt
-type MoveM = GameT Maybe
-type GameM = GameT []
+type HomeworldT = StateT GameSt
+type HWMove = HomeworldT Maybe
+type HWGame = HomeworldT []
 
 
 -- Instances -------------------------------------------------------------------------------------------------

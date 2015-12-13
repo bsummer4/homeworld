@@ -1,4 +1,6 @@
-module Moves where
+module HWMove where
+
+import           GamePrelude
 
 import           Control.Lens
 import           Control.Lens.TH
@@ -21,18 +23,7 @@ import           Debug.Trace
 import           System.Random.Shuffle      (shuffleM)
 import           Text.Show.Pretty           (ppShow)
 
-import           THUtils
-
 import Types
-
-
--- General Utilities -----------------------------------------------------------------------------------------
-
-enumeration ∷ (Bounded a, Enum a) ⇒ [a]
-enumeration = [minBound .. maxBound]
-
-safeHead ∷ [a] → Maybe a
-safeHead = \case { [] → Nothing; x:_ → Just x }
 
 
 -- Initial States --------------------------------------------------------------------------------------------
@@ -51,7 +42,6 @@ emptyState = GameSt
   , _turn       = 0
   , _numSystems = 0
   , _numPlayers = 0
-  , _history    = []
   }
 
 
@@ -64,22 +54,22 @@ colorsAvailable ∷ System → [Color]
 colorsAvailable system = (map (view color) $ starMakeup $ view star system)
                       ++ (map (view (piece . color)) $ view ships system)
 
-currentPlayer ∷ MoveM PlayerId
+currentPlayer ∷ HWMove PlayerId
 currentPlayer = view turn <$> get
 
-pieceAvailable ∷ Piece → MoveM Bool
+pieceAvailable ∷ Piece → HWMove Bool
 pieceAvailable pc = do
   st ← get
   let inReserve = fromMaybe 0 $ IntMap.lookup (fromEnum pc) $ st ^. reserve
   return (inReserve > 0)
 
-smallestAvailableSizeFor ∷ Color → MoveM Size
+smallestAvailableSizeFor ∷ Color → HWMove Size
 smallestAvailableSizeFor c = do
   sizeAvailability ← mapM (\sz → (sz,) <$> pieceAvailable (Piece c sz)) [Small ..]
   let sizesAvailable = fst <$> filter snd sizeAvailability
   lift $ safeHead sizesAvailable
 
-takeSmallestShipFromReserve ∷ Color → MoveM Size
+takeSmallestShipFromReserve ∷ Color → HWMove Size
 takeSmallestShipFromReserve color = do
   sz ← smallestAvailableSizeFor color
   takePc (Piece color sz)
@@ -88,7 +78,7 @@ takeSmallestShipFromReserve color = do
 
 -- Setup -----------------------------------------------------------------------------------------------------
 
-createSystem ∷ System → MoveM SystemId
+createSystem ∷ System → HWMove SystemId
 createSystem sys@(System star ships) = do
   case star of Single s     → takePc s
                Binary s1 s2 → takePc s1 >> takePc s2
@@ -99,7 +89,7 @@ createSystem sys@(System star ships) = do
   modify $ set systems (IntMap.insert newId sys (st ^. systems))
   return newId
 
-joinGame ∷ Setup → MoveM PlayerId
+joinGame ∷ Setup → HWMove PlayerId
 joinGame (Setup s1 s2 c) = do
   st ← get
   let playerId = st ^. numPlayers
@@ -107,37 +97,37 @@ joinGame (Setup s1 s2 c) = do
   modify $ set numPlayers ((st ^. numPlayers) + 1)
   return playerId
 
-initialize ∷ [Setup] → MoveM ()
+initialize ∷ [Setup] → HWMove ()
 initialize = mapM_ joinGame
 
 
 -- Game Logic Basics -----------------------------------------------------------------------------------------
 
-getSystem ∷ SystemId → MoveM System
+getSystem ∷ SystemId → HWMove System
 getSystem sysId = do
   st ← get
   lift $ IntMap.lookup sysId $ view systems st
 
-destinationId ∷ Destination → MoveM SystemId
+destinationId ∷ Destination → HWMove SystemId
 destinationId (Existing loc) = return loc
 destinationId (Fresh pc)     = do
   guard =<< pieceInReserve pc
   createSystem (System (Single pc) [])
 
-shipsAt ∷ SystemId → (Ship → Bool) → MoveM [Ship]
+shipsAt ∷ SystemId → (Ship → Bool) → HWMove [Ship]
 shipsAt loc pred = filter pred . view ships <$> getSystem loc
 
-piecesAt ∷ SystemId → (Piece → Bool) → MoveM [Piece]
+piecesAt ∷ SystemId → (Piece → Bool) → HWMove [Piece]
 piecesAt loc pred = do
   sys ← getSystem loc
   return $ filter pred
          $ fmap (view piece) (view ships sys)
         <> starMakeup (sys^.star)
 
-shipsExistAt ∷ SystemId → (Ship → Bool) → MoveM Bool
+shipsExistAt ∷ SystemId → (Ship → Bool) → HWMove Bool
 shipsExistAt loc  pred = not . null <$> shipsAt loc pred
 
-shipExistsAt ∷ SystemId → Ship → MoveM Bool
+shipExistsAt ∷ SystemId → Ship → HWMove Bool
 shipExistsAt loc ship = shipsExistAt loc (== ship)
 
 shipSize ∷ Ship → Size
@@ -146,42 +136,42 @@ shipSize = view (piece . size)
 biggestShip ∷ [Ship] → (Maybe Ship)
 biggestShip = safeHead . reverse . List.sortOn shipSize
 
-ourLargestShipAt ∷ SystemId → MoveM Ship
+ourLargestShipAt ∷ SystemId → HWMove Ship
 ourLargestShipAt loc = do
   us ← currentPlayer
   mShip ← biggestShip <$> shipsAt loc (\ship → us == view owner ship)
   lift mShip
 
-ownsAShipWith ∷ SystemId → PlayerId → Color → MoveM Bool
+ownsAShipWith ∷ SystemId → PlayerId → Color → HWMove Bool
 ownsAShipWith loc player color =
   shipsExistAt loc $ \(Ship owner (Piece c _)) →
     and [owner == player, c == color]
 
-homeWorld ∷ PlayerId → MoveM System
+homeWorld ∷ PlayerId → HWMove System
 homeWorld = getSystem
 
-advanceTurn ∷ MoveM ()
+advanceTurn ∷ HWMove ()
 advanceTurn =
   modify $ \st → set turn ((view turn st + 1) `mod` (view numPlayers st)) st
 
-placeShip ∷ SystemId → Ship → MoveM ()
+placeShip ∷ SystemId → Ship → HWMove ()
 placeShip loc p = modify $ \st →
   st & systems .~ IntMap.update f loc (st ^. systems)
     where
       f sys = Just $ over ships (p:) sys
 
-pieceInReserve ∷ Piece → MoveM Bool
+pieceInReserve ∷ Piece → HWMove Bool
 pieceInReserve pc = do
   st ← get
   inReserve ← lift $ IntMap.lookup (fromEnum pc) (st ^. reserve)
   return $ inReserve >= 1
 
-takePc ∷ Piece → MoveM ()
+takePc ∷ Piece → HWMove ()
 takePc pc = do
   guard =<< pieceInReserve pc
   modify $ over reserve $ flip IntMap.update (fromEnum pc) $ Just . (+1)
 
-deleteShip ∷ SystemId → Ship → MoveM ()
+deleteShip ∷ SystemId → Ship → HWMove ()
 deleteShip loc ship = do
   guard =<< shipExistsAt loc ship
   modify $ over systems
@@ -224,10 +214,7 @@ validActionSequence = checkValid
 
 -- Implementations for Moves ---------------------------------------------------------------------------------
 
-logEvent ∷ Event → MoveM ()
-logEvent e = modify $ over history (e:)
-
-actionAvailable ∷ SystemId → Color → MoveM Bool
+actionAvailable ∷ SystemId → Color → HWMove Bool
 actionAvailable loc col = do
   sys ← getSystem loc
   return $ col `elem` colorsAvailable sys
@@ -240,13 +227,13 @@ canTeleportBetween ∷ System → System → Bool
 canTeleportBetween sys1 sys2 =
   noneEqual $ map (view size) $ concat $ map (starMakeup . view star) [sys1,sys2]
 
-canMoveTo ∷ SystemId → SystemId → MoveM Bool
+canMoveTo ∷ SystemId → SystemId → HWMove Bool
 canMoveTo from to =
   if from == to
     then return False
     else canTeleportBetween <$> getSystem from <*> getSystem to
 
-constructShip ∷ SystemId → Color → MoveM ()
+constructShip ∷ SystemId → Color → HWMove ()
 constructShip loc color = do
   player ← currentPlayer
   guard =<< ownsAShipWith loc player color
@@ -254,7 +241,7 @@ constructShip loc color = do
   size ← takeSmallestShipFromReserve color
   placeShip loc $ Ship player $ Piece color size
 
-attackShip ∷ SystemId → Ship → MoveM ()
+attackShip ∷ SystemId → Ship → HWMove ()
 attackShip loc target = do
   player ← currentPlayer
   guard =<< actionAvailable loc Red
@@ -268,7 +255,7 @@ attackShip loc target = do
   takePc (view piece target)
   placeShip loc $ Ship player (view piece target)
 
-tradeShip ∷ SystemId → Piece → Color → MoveM ()
+tradeShip ∷ SystemId → Piece → Color → HWMove ()
 tradeShip loc pc newColor = do
   player ← currentPlayer
   let oldShip = Ship player pc
@@ -279,14 +266,14 @@ tradeShip loc pc newColor = do
   takePc (newShip ^. piece)
   placeShip loc newShip
 
-sacrificeShip ∷ SystemId → Piece → MoveM ()
+sacrificeShip ∷ SystemId → Piece → HWMove ()
 sacrificeShip loc pc = do
   player ← currentPlayer
   let ship = Ship player pc
   guard =<< shipExistsAt loc ship
   deleteShip loc ship
 
-moveShip ∷ SystemId → Piece → Destination → MoveM ()
+moveShip ∷ SystemId → Piece → Destination → HWMove ()
 moveShip loc pc dest = do
   player ← currentPlayer
   guard =<< actionAvailable loc Yellow
@@ -297,16 +284,16 @@ moveShip loc pc dest = do
   takePc (ship ^. piece)
   placeShip to ship
 
-systemStarColors ∷ SystemId → MoveM [Color]
+systemStarColors ∷ SystemId → HWMove [Color]
 systemStarColors loc = do
   sys ← getSystem loc
   return $ view color <$> starMakeup (view star sys)
 
 -- TODO Add everything back to the bank.
-destroySystem ∷ SystemId → MoveM ()
+destroySystem ∷ SystemId → HWMove ()
 destroySystem = modify . over systems . IntMap.delete
 
-destroyStarsWithColor ∷ SystemId → Color → MoveM ()
+destroyStarsWithColor ∷ SystemId → Color → HWMove ()
 destroyStarsWithColor loc c = do
   thisStar ← view star <$> getSystem loc
 
@@ -320,7 +307,7 @@ destroyStarsWithColor loc c = do
                  $ flip IntMap.update loc
                  $ Just . set star (Single p)
 
-causeCatastrophe ∷ SystemId → Color → MoveM ()
+causeCatastrophe ∷ SystemId → Color → HWMove ()
 causeCatastrophe loc c = do
   fuel ← piecesAt loc (\p → c == p^.color)
   guard $ length fuel >= 4
@@ -333,14 +320,14 @@ causeCatastrophe loc c = do
   deathstar ← (c `elem`) <$> systemStarColors loc
   when deathstar (destroyStarsWithColor loc c)
 
-cleanup ∷ MoveM ()
+cleanup ∷ HWMove ()
 cleanup = do
   sysIds ← IntMap.keys . view systems <$> get
   forM_ sysIds $ \loc → do
     docked ← view ships <$> getSystem loc
     when (null docked) $ destroySystem loc
 
-applyAction ∷ Action → MoveM ()
+applyAction ∷ Action → HWMove ()
 applyAction act = do
   act & \case
     Construct   loc c        → constructShip loc c
@@ -351,7 +338,7 @@ applyAction act = do
     Catastrophe loc color    → causeCatastrophe loc color
   cleanup
 
-applyEvent ∷ Event → MoveM ()
+applyEvent ∷ Event → HWMove Event
 applyEvent ev = do
   ev & \case
     Join setup   → void (joinGame setup)
@@ -359,4 +346,4 @@ applyEvent ev = do
     Turn actions → do guard $ validActionSequence actions
                       sequence_ (applyAction <$> actions)
                       advanceTurn
-  logEvent ev
+  return ev

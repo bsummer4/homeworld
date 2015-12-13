@@ -1,5 +1,7 @@
 module Main where
 
+import           GamePrelude
+
 import           Control.Lens
 import           Control.Lens.TH
 import           Control.Monad
@@ -20,66 +22,30 @@ import           System.Random.Shuffle      (shuffleM)
 import           Text.Show.Pretty           (ppShow)
 import           Control.Monad.Random
 
-import           THUtils
 import           Types
-import           Moves
-import qualified Games
+import           HWMove
+import qualified HWGame
+import           GameTree
 
 
 -- Tie it all together. --------------------------------------------------------------------------------------
 
-ordNub ∷ Ord a ⇒ [a] → [a]
-ordNub = Set.toList . Set.fromList
-
-executeEventLog ∷ [Event] → IO ()
-executeEventLog = loop emptyState
-  where
-    loop st events = do
-      putStrLn $ ppShow st
-      putStrLn ""
-      events & \case
-        []     → putStrLn "done"
-        (e:es) → do
-          putStrLn $ ppShow e
-          putStrLn ""
-          execStateT (applyEvent e) st & \case
-            Nothing  → putStrLn "Invalid move! aborting."
-            Just st' → loop st' es
-
 initialStates ∷ Int → IO [GameSt]
 initialStates n = flip evalRandT (mkStdGen 0) $ shuffleM $ take n $ execGame openings
   where execGame = flip execStateT emptyState
-        openings = Games.joins >> Games.joins
-
-followUps ∷ GameSt → Int → [GameSt]
-followUps initial depth = execGame (replicateM depth Games.simpleActionSeqs)
-  where execGame = flip execStateT initial
-
-showNumGames ∷ [GameSt] → IO ()
-showNumGames gms = print (length gms)
-
-showSomeGames ∷ [GameSt] → IO ()
-showSomeGames theGames = do
-  someOfThem ← take 100 <$> flip evalRandT (mkStdGen 0) (shuffleM theGames)
-  -- mapM_ (\x → print x >> putStrLn "") $ reverse <$> view history <$> someOfThem
-  executeEventLog $ reverse $ view history $ head someOfThem
+        openings = HWGame.joins >> HWGame.joins
 
 main ∷ IO ()
 main = do
   LBS8.putStrLn $ A.encode exampleGame
-
   initial ← head <$> initialStates 10
-
   putStrLn "INITIAL STATE"
   putStrLn $ ppShow initial
 
-  putStrLn "How deep should we go?"
-  depth ← read <$> getLine
+  putStrLn "SOME GAME"
+  mapM_ print $ take 2 $ gameStates $ gameTree initial HWGame.turns
 
-  let allFollowupStates = followUps initial depth
-  showNumGames allFollowupStates
-  showSomeGames allFollowupStates
-
+  printTrace (view systems) $ dumbTrace $ gameTree initial HWGame.turns
 
 
 -- Example Games ---------------------------------------------------------------------------------------------
