@@ -68,7 +68,7 @@ dumbActor ∷ Monad m => Actor m e s
 dumbActor (GameTree _ elems) = safeHead <$> return elems
 
 randomActor ∷ ActorIO e s
-randomActor (GameTree _ elems) = safeHead <$> shuffleM (take 3 elems)
+randomActor (GameTree _ elems) = safeHead <$> shuffleM (take 100 elems)
 
 interleaveActs ∷ [Actor m e st] -> IO (Actor m e st)
 interleaveActs _actors = undefined
