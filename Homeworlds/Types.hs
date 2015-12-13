@@ -40,6 +40,7 @@ data GameSt = GameSt { _reserve    ∷ !(IntMap Int)
                      , _playerToMv ∷ !PlayerId
                      , _numSystems ∷ !Int
                      , _numPlayers ∷ !Int
+                     , _losers     ∷ ![PlayerId]
                      }
   deriving (Eq, Ord, Show)
 

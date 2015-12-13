@@ -1,5 +1,4 @@
 {-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Homeworlds.Move where
 
@@ -27,6 +26,7 @@ emptyState = GameSt
   , _playerToMv = 0
   , _numSystems = 0
   , _numPlayers = 0
+  , _losers     = []
   }
 
 
@@ -44,8 +44,15 @@ starColors = star . to starMakeup . traverse . color
 dockedColors ∷ Fold System Color
 dockedColors = ships . traverse . piece . color
 
-colorsAvailable ∷ System → [Color]
-colorsAvailable system = (system ^.. starColors) ++ (system ^.. dockedColors)
+isAHomeworld ∷ SystemId → Getter GameSt Bool
+isAHomeworld loc = numPlayers . to (loc >=)
+
+isOwnedBy ∷ Ship → PlayerId → Bool
+s `isOwnedBy` p = s ^. owner == p
+
+colorsAvailableFor ∷ PlayerId → System → [Color]
+colorsAvailableFor pid system = (system ^.. starColors)
+                             ++ (view (piece . color) <$> filter (`isOwnedBy` pid) (system ^. ships))
 
 systemPieces ∷ System → [Piece]
 systemPieces sys = (sys ^. star . to starMakeup) <> (sys ^.. ships . traverse . piece)
@@ -155,15 +162,30 @@ ownsAShipWith loc player colr =
 homeWorld ∷ PlayerId → HWMove System
 homeWorld = lookupSystem
 
+playerLoses ∷ PlayerId → HWMove ()
+playerLoses p = do
+  losers %= (p:)
+
+handleWinConditions ∷ HWMove ()
+handleWinConditions = do
+  playerCount ← use numPlayers
+  forM_ [0 .. playerCount-1] $ \pid → do
+    mSys ← use (systems . at pid)
+    mSys & \case
+      Nothing  → playerLoses pid
+      Just sys → when (null $ filter (`isOwnedBy` pid) (sys ^. ships)) $
+                   playerLoses pid
+
 advanceTurn ∷ HWMove ()
-advanceTurn =
-  modify $ \st → set playerToMv ((view playerToMv st + 1) `mod` (view numPlayers st)) st
+advanceTurn = do
+  playerCount ← use numPlayers
+  handleWinConditions
+  playerToMv %= \pid → (pid + 1) `mod` playerCount
 
 placeShip ∷ SystemId → Ship → HWMove ()
-placeShip loc p = modify $ \st →
-  st & systems .~ IntMap.update f loc (st ^. systems)
-    where
-      f sys = Just $ over ships (p:) sys
+placeShip loc p = do
+  sys ← lookupSystem loc
+  systems . at loc .= Just (over ships (p:) sys)
 
 deleteShip ∷ SystemId → Ship → HWMove ()
 deleteShip loc ship = do
@@ -211,7 +233,8 @@ validActionSequence = checkValid
 actionAvailable ∷ SystemId → Color → HWMove Bool
 actionAvailable loc col = do
   sys ← lookupSystem loc
-  return $ col `elem` colorsAvailable sys
+  pid ← use playerToMv
+  return $ col `elem` colorsAvailableFor pid sys
 
 noneEqual ∷ Eq a ⇒ [a] → Bool
 noneEqual [] = True
@@ -307,20 +330,26 @@ causeCatastrophe loc c = do
   fuel ← piecesAt loc (\p → c == p^.color)
   guard $ length fuel >= 4
 
+  -- TODO This would be a lot less confusing if we just got the system,
+  --      and then did all of our operations on that pure value.
+
   -- It's important that we do this before we kill the star, otherwise we
   -- might try to delete ships that no longer exist.
   targets ← shipsAt loc (\p → c == p^.piece.color)
-  forM_ targets (deleteShip loc)
+  forM_ targets $ do
+    deleteShip loc
 
-  deathstar ← (c `elem`) <$> systemStarColors loc
-  when deathstar (destroyStarsWithColor loc c)
+  starAffected ← (c `elem`) <$> systemStarColors loc
+  when starAffected $ do
+    destroyStarsWithColor loc c
 
 cleanup ∷ HWMove ()
 cleanup = do
-  sysIds ← IntMap.keys . view systems <$> get
-  forM_ sysIds $ \loc → do
-    docked ← view ships <$> lookupSystem loc
-    when (null docked) $ destroySystem loc
+  sysKVPairs ← use (systems . to IntMap.toList)
+  forM_ sysKVPairs $ \(loc, sys) → do
+    hw ← use (isAHomeworld loc)
+    when (not hw && null (sys ^. ships)) $ do
+      destroySystem loc
 
 applyAction ∷ Action → HWMove ()
 applyAction act = do
@@ -335,9 +364,10 @@ applyAction act = do
 
 applyEvent ∷ Event → HWMove Event
 applyEvent ev = do
+  assuming (losers . to null)
   ev & \case
     Join setup   → void (joinGame setup)
-    Resign       → undefined
+    Resign       → use playerToMv >>= playerLoses
     Turn actions → do guard $ validActionSequence actions
                       sequence_ (applyAction <$> actions)
                       advanceTurn

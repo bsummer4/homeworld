@@ -41,6 +41,7 @@ executable homeworlds
     basic-prelude,
     bytestring,
     containers,
+    IfElse,
     lens,
     mmorph,
     MonadRandom,

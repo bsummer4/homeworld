@@ -6,6 +6,7 @@ module Core
   , ordNub
   , allEqual
   , pprint
+  , unlessM
   ) where
 
 import BasicPrelude            as X hiding (concat, product, sum, uncons, (<.>))
@@ -50,3 +51,9 @@ allEqual (x:y:zs) = (x==y) && allEqual (y:zs)
 
 pprint ∷ Show a ⇒ a → IO ()
 pprint = putStrLn . cs . ppShow
+
+unlessM ∷ Monad m ⇒ (m Bool) → m () → m ()
+unlessM check action = do
+  condition ← check
+  unless condition $ do
+    action
