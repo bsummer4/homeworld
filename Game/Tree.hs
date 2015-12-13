@@ -18,9 +18,10 @@ type Move st = StateT st Maybe
 -- follow-up events and their associated states.
 type Game st = StateT st []
 
-data GameTree e st     = GameTree st (Forest (e,st)) deriving (Eq,Show,Functor,Foldable,Traversable)
-data GameTrace e st    = Trace st [(e,st)]           deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
-type Actor m e st      = GameTree e st -> m (Maybe (e, GameTree e st))
+type GameSubTree e st  = Tree (e,st)
+data GameTree e st     = GameTree st [GameSubTree e st] deriving (Eq,Show,Functor,Foldable,Traversable)
+data GameTrace e st    = GameTrace st [(e,st)]          deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
+type Actor m e st      = GameTree e st -> m (Maybe (GameSubTree e st))
 type ActorIO e st      = Actor IO e st
 type Scoring st        = st -> Int
 
@@ -64,13 +65,10 @@ statesAtDepth depth = fromMaybe [] . safeHead . drop depth . Tree.levels . state
 -- GameTree e st -> m (Maybe (e, GameTree e st))
 
 dumbActor ∷ Monad m => Actor m e s
-dumbActor (GameTree _ elems) = return $ f <$> safeHead elems
-  where f (Node (e, st) forest) = (e, GameTree st forest)
+dumbActor (GameTree _ elems) = safeHead <$> return elems
 
 randomActor ∷ ActorIO e s
-randomActor (GameTree _ elems) = fmap f . safeHead <$> shuffleM elems
-  where
-    f (Node (e, st) forest) = (e, GameTree st forest)
+randomActor (GameTree _ elems) = safeHead <$> shuffleM (take 3 elems)
 
 interleaveActs ∷ [Actor m e st] -> IO (Actor m e st)
 interleaveActs _actors = undefined
@@ -88,16 +86,16 @@ lookaheadAI = undefined
 -- Operations on Traces --------------------------------------------------------------------------------------
 
 traceEvents ∷ GameTrace e st → [e]
-traceEvents (Trace _ hist) = fst <$> hist
+traceEvents (GameTrace _ hist) = fst <$> hist
 
 printTraceHistory ∷ (Show e, Show st) ⇒ GameTrace e st → IO ()
-printTraceHistory tr@(Trace init _) = do
+printTraceHistory tr@(GameTrace init _) = do
   print init
   forM_ (traceEvents tr) $ \e → do
     print e
 
 printTrace ∷ (Show e, Show a) ⇒ (st → a) → GameTrace e st → IO ()
-printTrace disp (Trace init happenings) = do
+printTrace disp (GameTrace init happenings) = do
   putStrLn "INITIAL"
   pprint (disp init)
   putStrLn ""
@@ -109,24 +107,26 @@ printTrace disp (Trace init happenings) = do
     putStrLn ""
 
 traceTake ∷ Int → GameTrace e st → GameTrace e st
-traceTake n (Trace st hist) = Trace st (take n hist)
+traceTake n (GameTrace st hist) = GameTrace st (take n hist)
 
-playGame ∷ Monad m => Actor m e st → GameTree e st → m (GameTrace e st)
-playGame actor init@(GameTree initialState _) = Trace initialState <$> loop init
+playGame ∷ ∀m e st. Monad m => Actor m e st → GameTree e st → m (GameTrace e st)
+playGame actor entireGameTree@(GameTree initialState _) = do
+    thingsThatHappened ∷ [(e,st)] ← loop entireGameTree
+    return $ GameTrace initialState thingsThatHappened
   where
+    loop ∷ GameTree e st → m [(e,st)]
     loop tr = do
-      actor tr >>= \case
-        Nothing → return []
-        Just (e, subtree@(GameTree st' _)) → ((e, st'):) <$> loop subtree
+      mBranchChoosen ← actor tr
+      mBranchChoosen & \case
+        Nothing      →
+          return []
+
+        Just (Node happening furtherPossibilities) → do
+          moreHappenings ← loop (GameTree (snd happening) furtherPossibilities)
+          return (happening : moreHappenings)
 
 dumbGame ∷ Monad m => GameTree e st -> m (GameTrace e st)
 dumbGame = playGame dumbActor
 
 randomGame ∷ GameTree e st -> IO (GameTrace e st)
 randomGame = playGame randomActor
-
-dumbTrace ∷ ∀e st. GameTree e st → GameTrace e st
-dumbTrace (GameTree init children) = traceTake 100 $ Trace init $ loop children
-  where loop ∷ [Tree (e,st)] → [(e,st)]
-        loop = \case []                    → []
-                     Node (e,st) below : _ → (e,st) : loop below

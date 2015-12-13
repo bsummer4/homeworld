@@ -25,7 +25,7 @@ emptyState = GameSt
   , _systems    = mempty
   , _playerToMv = 0
   , _numSystems = 0
-  , _numPlayers = 0
+  , _numPlayers = 2
   , _losers     = []
   }
 
@@ -45,7 +45,7 @@ dockedColors ∷ Fold System Color
 dockedColors = ships . traverse . piece . color
 
 isAHomeworld ∷ SystemId → Getter GameSt Bool
-isAHomeworld loc = numPlayers . to (loc >=)
+isAHomeworld loc = numPlayers . to (loc <)
 
 isOwnedBy ∷ Ship → PlayerId → Bool
 s `isOwnedBy` p = s ^. owner == p
@@ -95,13 +95,12 @@ grabSystem sys = do
   mapM_ grabShip (sys ^. ships)
   newId ← use numSystems
   numSystems         .= (newId + 1)
-  systems . ix newId .= sys
+  systems . at newId .= Just sys
   return newId
 
 grabPlayer ∷ HWMove PlayerId
 grabPlayer = do
-  playerId ← use numPlayers
-  numPlayers %= (+1)
+  playerId ← use (systems . to length) -- TODO Yuck
   return playerId
 
 grabOrLookupDestination ∷ Destination → HWMove SystemId
@@ -112,10 +111,17 @@ grabOrLookupDestination = \case
 
 -- Setup -----------------------------------------------------------------------------------------------------
 
+assumingInJoinPhase ∷ HWMove ()
+assumingInJoinPhase = do
+  systemCount ← use (systems . to length)
+  playerCount ← use numPlayers
+  guard (systemCount < playerCount)
+
 joinGame ∷ Setup → HWMove PlayerId
 joinGame (Setup s1 s2 c) = do
+  assumingInJoinPhase
   playerId ← grabPlayer
-  _ ← grabSystem $ System (Binary s1 s2) [Ship playerId (Piece c Large)]
+  _        ← grabSystem $ System (Binary s1 s2) [Ship playerId (Piece c Large)]
   return playerId
 
 
@@ -339,8 +345,8 @@ causeCatastrophe loc c = do
   forM_ targets $ do
     deleteShip loc
 
-  starAffected ← (c `elem`) <$> systemStarColors loc
-  when starAffected $ do
+  starIsAffected ← (c `elem`) <$> systemStarColors loc
+  when starIsAffected $ do
     destroyStarsWithColor loc c
 
 cleanup ∷ HWMove ()
@@ -362,13 +368,24 @@ applyAction act = do
     Catastrophe loc colr     → causeCatastrophe loc colr
   cleanup
 
+assumingInTurnPhase ∷ HWMove ()
+assumingInTurnPhase = do
+  systemCount ← use (systems . to length)
+  playerCount ← use numPlayers
+  guard (systemCount >= playerCount)
+
+applyTurn ∷ [Action] → HWMove()
+applyTurn actions = do
+  assumingInTurnPhase
+  guard $ validActionSequence actions
+  sequence_ (applyAction <$> actions)
+  advanceTurn
+
 applyEvent ∷ Event → HWMove Event
 applyEvent ev = do
   assuming (losers . to null)
   ev & \case
     Join setup   → void (joinGame setup)
     Resign       → use playerToMv >>= playerLoses
-    Turn actions → do guard $ validActionSequence actions
-                      sequence_ (applyAction <$> actions)
-                      advanceTurn
+    Turn actions → applyTurn actions
   return ev

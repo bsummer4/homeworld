@@ -107,11 +107,14 @@ setup = do
 
 -- Execute Arbitrary Actions ---------------------------------------------------------------------------------
 
+fromMove ∷ HWMove a → HWGame a
+fromMove = hoist toList
+
 joins ∷ HWGame Event
 joins = setup >>= fromMove . applyEvent . Join
 
 turns ∷ HWGame Event
 turns = actionSeqs >>= fromMove . applyEvent . Turn
 
-fromMove ∷ HWMove a → HWGame a
-fromMove = hoist toList
+events ∷ HWGame Event
+events = join $ lift [joins, turns]

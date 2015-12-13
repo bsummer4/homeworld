@@ -32,7 +32,7 @@ Just someArbitraryState = flip execStateT initialState $ do
 main ∷ IO ()
 main = do
     randomGame (gameTree initialState moves) >>= \case
-        Trace initialSt history → do
+        GameTrace initialSt history → do
             print initialSt
             forM_ history $ \(e,st) → print e >> print st
 
