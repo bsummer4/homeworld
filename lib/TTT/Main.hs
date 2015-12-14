@@ -1,7 +1,7 @@
 module TTT.Main where
 
 import Core
-import Game.Tree
+import GameTree
 import TTT.Move
 import TTT.Types
 

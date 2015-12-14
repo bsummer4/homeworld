@@ -1,4 +1,4 @@
-module Game.Tree where
+module GameTree where
 
 import Core hiding (below, children, init, pred)
 

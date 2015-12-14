@@ -1,6 +1,8 @@
 resolver: lts-3.16
 
-flags: {}
+flags:
+  homeworlds:
+    web: False
 
 packages:
   - location: '.'

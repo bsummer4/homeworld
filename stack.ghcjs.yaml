@@ -1,6 +1,8 @@
 resolver: lts-3.16
 
-flags: {}
+flags:
+  homeworlds:
+    web: True
 
 compiler: ghcjs-0.2.0.20151029_ghc-7.10.2
 compiler-check: match-exact

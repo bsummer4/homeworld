@@ -8,13 +8,101 @@ category:            Game
 build-type:          Simple
 cabal-version:       >=1.10
 
-executable homeworlds
-  main-is:             Main.hs
+Flag Web
+  Description: Enable web-only dependencies.
+  Default:     False
+
+Executable homeworlds-cli
+  hs-source-dirs:      exe
+  main-is:             homeworlds-cli.hs
   default-language:    Haskell2010
   ghc-options:         -Wall
-  other-modules:
+  default-extensions:
+    DeriveFoldable
+    DeriveTraversable
+    FlexibleInstances
+    LambdaCase
+    OverloadedStrings
+    ScopedTypeVariables
+    TemplateHaskell
+    TupleSections
+    UnicodeSyntax
+    PackageImports
+    NoImplicitPrelude
+
+  build-depends:
+    aeson,
+    base,
+    basic-prelude,
+    bytestring,
+    containers,
+    homeworlds,
+    IfElse,
+    lens,
+    mmorph,
+    MonadRandom,
+    mtl,
+    pretty-show,
+    random-shuffle,
+    string-conversions,
+    template-haskell,
+    transformers
+
+
+Executable homeworlds-web
+  hs-source-dirs:      exe
+  main-is:             homeworlds-web.hs
+  default-language:    Haskell2010
+  ghc-options:         -Wall
+  default-extensions:
+    DeriveFoldable
+    DeriveTraversable
+    FlexibleInstances
+    LambdaCase
+    OverloadedStrings
+    ScopedTypeVariables
+    TemplateHaskell
+    TupleSections
+    UnicodeSyntax
+    PackageImports
+    NoImplicitPrelude
+
+  build-depends:
+    aeson,
+    base,
+    basic-prelude,
+    bytestring,
+    containers,
+    homeworlds,
+    IfElse,
+    lens,
+    mmorph,
+    MonadRandom,
+    mtl,
+    pretty-show,
+    random-shuffle,
+    reflex,
+    string-conversions,
+    template-haskell,
+    ref-tf,
+    dependent-sum,
+    file-embed,
+    transformers
+
+  if flag(Web)
+    cpp-options: -DWEB
+    build-depends:
+      ghcjs-dom,
+      reflex-dom
+
+
+Library
+  default-language:    Haskell2010
+  hs-source-dirs:      lib
+  ghc-options:         -Wall
+  exposed-modules:
     Core
-    Game.Tree
+    GameTree
     Homeworlds.Game
     Homeworlds.Move
     Homeworlds.Types

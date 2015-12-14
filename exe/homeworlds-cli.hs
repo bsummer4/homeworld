@@ -1,7 +1,7 @@
 module Main where
 
 import           Core
-import           Game.Tree
+import           GameTree
 import qualified Homeworlds.Game  as HW
 import qualified Homeworlds.Move  as HW
 import           Homeworlds.Types as HW

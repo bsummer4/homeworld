@@ -4,7 +4,7 @@
 module Homeworlds.Types where
 
 import Core
-import Game.Tree
+import GameTree
 
 import qualified Data.Aeson         as A
 import qualified Data.IntMap.Strict as IntMap

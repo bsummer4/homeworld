@@ -3,6 +3,5 @@
 set -e
 
 brew install haskell-stack
-
 stack setup
 stack build --only-snapshot
