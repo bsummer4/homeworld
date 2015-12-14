@@ -3,4 +3,3 @@
 set -e
 
 stack build
-STACK_YAML=stack.ghcjs.yaml stack build

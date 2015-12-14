@@ -73,8 +73,29 @@ randomActor (GameTree _ elems) = safeHead <$> shuffleM (take 100 elems)
 interleaveActs ∷ [Actor m e st] -> IO (Actor m e st)
 interleaveActs _actors = undefined
 
+-- type Actor m e st      = GameTree e st -> m (Maybe (GameSubTree e st))
 humanActor ∷ (Show e, Show st) => ActorIO e st
-humanActor = undefined
+humanActor (GameTree initialState []) = do
+    putStrLn "The game is over!"
+    putStrLn "Final state:"
+    pprint initialState
+    return Nothing
+
+humanActor (GameTree initialState possibilities) = do
+    putStrLn "=========== Current Game State ==============="
+    pprint initialState
+
+    let possibleEvents = fst . Tree.rootLabel <$> possibilities
+    forM_ (zip [0∷Int ..] possibleEvents) $ \ (i,e) → do
+      putStrLn ("  " <> cs(show i) <> ". " <> cs(show e))
+    let numPossibilities = length possibilities
+    n ← read <$> getLine
+    let choice = possibilities !! (n `mod` numPossibilities)
+    let choiceEv = possibleEvents !! (n `mod` numPossibilities)
+    putStrLn ("You chose this: " <> cs(show choiceEv))
+    putStrLn ("Push enter to continue")
+    _ ← getLine
+    return (Just choice)
 
 naiveAI ∷ Scoring st -> Actor m e st
 naiveAI = undefined
@@ -130,3 +151,6 @@ dumbGame = playGame dumbActor
 
 randomGame ∷ GameTree e st -> IO (GameTrace e st)
 randomGame = playGame randomActor
+
+humanGame ∷ (Show e, Show st) => GameTree e st -> IO (GameTrace e st)
+humanGame = playGame humanActor

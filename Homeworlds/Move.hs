@@ -260,7 +260,7 @@ constructShip ∷ SystemId → Color → HWMove ()
 constructShip loc colr = do
   player ← use playerToMv
   guard =<< ownsAShipWith loc player colr
-  guard =<< actionAvailable loc colr
+  guard =<< actionAvailable loc Green
   pc ← grabSmallestShipFromReserve colr
   placeShip loc $ Ship player pc
 

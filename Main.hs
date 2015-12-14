@@ -9,5 +9,5 @@ import           Homeworlds.Types as HW
 
 main ∷ IO ()
 main = do
-  gameTrace ← randomGame $ gameTree HW.emptyState HW.events
+  gameTrace ← humanGame $ gameTree HW.emptyState HW.events
   printTrace (\st → (st ^. systems, st ^. losers)) gameTrace

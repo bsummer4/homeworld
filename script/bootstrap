@@ -2,9 +2,7 @@
 
 set -e
 
-stack setup
-stack build --only-snapshot
+brew install haskell-stack
 
-export STACK_YAML=stack.ghcjs.yaml
 stack setup
 stack build --only-snapshot

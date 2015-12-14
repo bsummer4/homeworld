@@ -3,16 +3,16 @@ module Homeworlds.Game where
 import Core
 import Homeworlds.Move
 import Homeworlds.Types hiding (systems)
+import qualified Homeworlds.Types as Types
 
-import Control.Monad.State.Lazy
+import           Control.Monad.State.Lazy
+import qualified Data.IntMap              as IntMap
 
 
 -- General Utilities -----------------------------------------------------------------------------------------
 
 systems ∷ HWGame SystemId
-systems = do
-  n ← use numSystems
-  lift [0 .. n-1]
+systems = IntMap.keys <$> use Types.systems >>= lift
 
 pieces ∷ HWGame Piece
 pieces = Piece <$> lift enumeration <*> lift enumeration
@@ -96,12 +96,6 @@ setup = do
   guard $ p1 >= p2
   c ← lift enumeration
 
-  -- Just to constrain the space
-  guard $ p1^.size /= p2^.size
-  guard $ p1^.color /= p2^.color
-  guard $ c         /= p2^.color
-  guard $ p1^.color /= c
-
   return (Setup p1 p2 c)
 
 
@@ -111,10 +105,18 @@ fromMove ∷ HWMove a → HWGame a
 fromMove = hoist toList
 
 joins ∷ HWGame Event
-joins = setup >>= fromMove . applyEvent . Join
+joins = do
+  fromMove assumingInJoinPhase
+  s ← setup
+  fromMove $ applyEvent $ Join s
 
 turns ∷ HWGame Event
-turns = actionSeqs >>= fromMove . applyEvent . Turn
+turns = do
+  fromMove assumingInTurnPhase
+  acts ← actionSeqs
+  fromMove $ applyEvent $ Turn acts
 
 events ∷ HWGame Event
-events = join $ lift [joins, turns]
+events = do
+  action ← lift [joins, turns]
+  action
