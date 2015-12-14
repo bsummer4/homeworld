@@ -246,9 +246,14 @@ noneEqual ∷ Eq a ⇒ [a] → Bool
 noneEqual [] = True
 noneEqual (x:xs) = all (/= x) xs && noneEqual xs
 
+starSizes ∷ Fold System Size
+starSizes = star . to starMakeup . traverse . size
+
+noMatches ∷ Eq a ⇒ [a] → [a] → Bool
+noMatches xs ys = null $ do { x <- xs; y <- ys; guard (x == y) }
+
 canTeleportBetween ∷ System → System → Bool
-canTeleportBetween sys1 sys2 =
-  noneEqual $ map (view size) $ concat $ map (starMakeup . view star) [sys1,sys2]
+canTeleportBetween sys1 sys2 = noMatches (sys1 ^.. starSizes) (sys2 ^.. starSizes)
 
 canMoveTo ∷ SystemId → SystemId → HWMove Bool
 canMoveTo start dest =
@@ -302,6 +307,7 @@ moveShip loc pc dest = do
   guard =<< actionAvailable loc Yellow
   destId ← grabOrLookupDestination dest
   guard =<< canMoveTo loc destId
+  -- traceShowM (loc, pc, dest)
   let ship = Ship player pc
   deleteShip loc ship
   _ ← grabPc (ship ^. piece)
