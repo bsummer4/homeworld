@@ -19,28 +19,28 @@ data Color = Red | Green | Blue | Yellow
 data Size = Small | Medium | Large
   deriving (Eq, Ord, Enum, Bounded)
 
-data Piece = Piece { _color ∷ !Color, _size ∷ !Size }
+data Piece = Piece { pieceColor ∷ !Color, pieceSize ∷ !Size }
   deriving (Eq, Ord, Bounded)
 
-data Ship = Ship { _owner ∷ !PlayerId, _piece ∷ !Piece }
+data Ship = Ship { shipOwner ∷ !PlayerId, shipPiece ∷ !Piece }
   deriving (Eq, Ord)
 
 data Star = Binary !Piece !Piece
           | Single !Piece
   deriving (Eq, Ord, Show)
 
-data System = System { _star ∷ !Star, _ships ∷ ![Ship] }
+data System = System { systemStar ∷ !Star, systemDocked ∷ ![Ship] }
   deriving (Eq, Ord, Show)
 
 type PlayerId = Int
 type SystemId = Int
 
-data GameSt = GameSt { _reserve    ∷ !(IntMap Int)
-                     , _systems    ∷ !(IntMap System)
-                     , _playerToMv ∷ !PlayerId
-                     , _numSystems ∷ !Int
-                     , _numPlayers ∷ !Int
-                     , _losers     ∷ ![PlayerId]
+data GameSt = GameSt { gameStReserve    ∷ !(IntMap Int)
+                     , gameStSystems    ∷ !(IntMap System)
+                     , gameStPlayerToMv ∷ !PlayerId
+                     , gameStNumSystems ∷ !Int
+                     , gameStNumPlayers ∷ !Int
+                     , gameStLosers     ∷ ![PlayerId]
                      }
   deriving (Eq, Ord, Show)
 
@@ -103,14 +103,14 @@ instance A.FromJSON Color where parseJSON = undefined
 instance A.ToJSON Piece where toJSON = A.toJSON . Show.show
 instance A.FromJSON Piece where parseJSON = undefined
 
-makeLenses ''Piece
-makeLenses ''Ship
-makeLenses ''Star
-makeLenses ''System
-makeLenses ''GameSt
-makeLenses ''Setup
-makeLenses ''Action
-makeLenses ''Event
+makeFields ''Piece
+makeFields ''Ship
+makeFields ''Star
+makeFields ''System
+makeFields ''GameSt
+makeFields ''Setup
+makeFields ''Action
+makeFields ''Event
 
 $(deriveJSON ''Size)
 $(deriveJSON ''Star)

@@ -28,7 +28,7 @@ moves = do
   loc  ← systems
   pl   ← fromMove (use playerToMv)
   sys  ← fromMove (lookupSystem loc)
-  pc   ← lift $ map (view piece) $ filter ((pl ==) . view owner) $ view ships sys
+  pc   ← lift $ map (view piece) $ filter ((pl ==) ◁ view owner) $ view docked sys
   dest ← destinations
   return $ Move loc pc dest
 
@@ -37,7 +37,7 @@ attacks = do
   loc    ← systems
   pl     ← fromMove (use playerToMv)
   sys    ← fromMove (lookupSystem loc)
-  target ← lift $ filter ((pl /=) . view owner) $ view ships sys
+  target ← lift $ filter ((pl /=) ◁ view owner) $ view docked sys
   return $ Attack loc target
 
 trades ∷ HWGame Action
@@ -45,9 +45,9 @@ trades = do
   loc    ← systems
   sys    ← fromMove (lookupSystem loc)
   pl     ← fromMove (use playerToMv)
-  target ← lift $ filter ((pl ==) . view owner) $ view ships sys
+  target ← lift $ filter ((pl ==) ◁ view owner) $ view docked sys
   colr   ← lift $ filter (/= target^.piece.color) enumeration
-  return $ Trade loc (target ^. piece) colr
+  return $ Trade loc (target^.piece) colr
 
 constructions ∷ HWGame Action
 constructions = Construct <$> systems <*> lift enumeration
@@ -65,7 +65,7 @@ sacrifices = do
   loc    ← systems
   sys    ← fromMove (lookupSystem loc)
   pl     ← fromMove (use playerToMv)
-  target ← lift $ filter ((pl ==) . view owner) $ view ships sys
+  target ← lift $ filter ((pl ==) ◁ view owner) $ view docked sys
   return $ Sacrifice loc (target ^. piece)
 
 actions ∷ HWGame Action
@@ -80,7 +80,7 @@ simpleActionSeqs = do
       Green  → constructions
       Blue   → trades
       Yellow → moves
-    _                → return [action]
+    _ → return [action]
 
 actionSeqs ∷ HWGame [Action]
 actionSeqs = do
@@ -95,7 +95,6 @@ setup = do
   p2 ← pieces
   guard $ p1 >= p2
   c ← lift enumeration
-
   return (Setup p1 p2 c)
 
 

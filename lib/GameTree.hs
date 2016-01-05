@@ -48,16 +48,16 @@ eventForests ∷ GameTree e st → Forest e
 eventForests (GameTree _ moves) = fmap fst <$> moves
 
 gameStates ∷ GameTree e st → [st]
-gameStates = toList . stateTree
+gameStates = stateTree ▷ toList
 
 stateSpace ∷ GameTree e st → Int
-stateSpace = length . gameStates
+stateSpace = gameStates ▷ length
 
 reachableStatesWhere ∷ (st → Bool) → GameTree e st → [st]
-reachableStatesWhere pred = filter pred . gameStates
+reachableStatesWhere pred = filter pred ◁ gameStates
 
 statesAtDepth ∷ Int → GameTree e st → [st]
-statesAtDepth depth = fromMaybe [] . safeHead . drop depth . Tree.levels . stateTree
+statesAtDepth depth = fromMaybe [] ◁ safeHead ◁ drop depth ◁ Tree.levels ◁ stateTree
 
 
 -- Actors ----------------------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ humanActor (GameTree initialState possibilities) = do
     putStrLn "=========== Current Game State ==============="
     pprint initialState
 
-    let possibleEvents = fst . Tree.rootLabel <$> possibilities
+    let possibleEvents = fst ◁ Tree.rootLabel <$> possibilities
     forM_ (zip [0∷Int ..] possibleEvents) $ \ (i,e) → do
       putStrLn ("  " <> cs(show i) <> ". " <> cs(show e))
     let numPossibilities = length possibilities

@@ -7,6 +7,7 @@ module Core
   , allEqual
   , pprint
   , unlessM
+  , (◁), (▷)
   ) where
 
 import BasicPrelude            as X hiding (concat, product, sum, uncons, (<.>))
@@ -23,7 +24,6 @@ import Text.Show.Pretty        as X (ppShow)
 import qualified Data.Aeson.TH       as A
 import qualified Data.Set            as Set
 import qualified Language.Haskell.TH as TH
-
 
 jsonOptions ∷ A.Options
 jsonOptions = A.defaultOptions
@@ -42,7 +42,16 @@ safeHead ∷ [a] → Maybe a
 safeHead = \case { [] → Nothing; x:_ → Just x }
 
 ordNub ∷ Ord a ⇒ [a] → [a]
-ordNub = Set.toList . Set.fromList
+ordNub = Set.fromList ▷ Set.toList
+
+infixr 9 ◁
+infixl 9 ▷
+
+(◁) ∷ (b → c) → (a → b) → (a → c)
+(▷) ∷ (a → b) → (b → c) → (a → c)
+
+(◁) = (.)
+(▷) = flip (.)
 
 allEqual ∷ Eq a ⇒ [a] → Bool
 allEqual []       = True
@@ -50,7 +59,7 @@ allEqual [_]      = True
 allEqual (x:y:zs) = (x==y) && allEqual (y:zs)
 
 pprint ∷ Show a ⇒ a → IO ()
-pprint = putStrLn . cs . ppShow
+pprint = putStrLn ◁ cs ◁ ppShow
 
 unlessM ∷ Monad m ⇒ (m Bool) → m () → m ()
 unlessM check action = do

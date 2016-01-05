@@ -10,15 +10,15 @@ import Control.Monad.State.Lazy
 data Player = X | O
   deriving (Eq,Ord,Show,Enum,Bounded)
 
-data Tile = Tile { _xIdx ∷ !Int
-                 , _yIdx ∷ !Int }
+data Tile = Tile { tileXIdx ∷ !Int
+                 , tileYIdx ∷ !Int }
   deriving (Eq,Ord,Show)
 
-data Event = Place !Tile
+data Event = Place { eventPlace ∷ !Tile }
   deriving (Eq,Ord,Show)
 
-data GameSt = GameSt { _player ∷ !Player
-                     , _board  ∷ !(Map Tile Player) }
+data GameSt = GameSt { gameStPlayer ∷ !Player
+                     , gameStBoard  ∷ !(Map Tile Player) }
   deriving (Eq,Ord,Show)
 
 type TTTMove = StateT GameSt Maybe
@@ -30,9 +30,9 @@ type TTTGame = StateT GameSt []
 initialState ∷ GameSt
 initialState = GameSt X mempty
 
-makeLenses ''Tile
-makeLenses ''Event
-makeLenses ''GameSt
+makeFields ''Tile
+makeFields ''Event
+makeFields ''GameSt
 
 instance FromJSON (Map Tile Player) where parseJSON = undefined
 instance ToJSON (Map Tile Player)   where toJSON = undefined

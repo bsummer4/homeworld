@@ -21,12 +21,12 @@ startingDeck = IntMap.fromList $ do
 
 emptyState ∷ GameSt
 emptyState = GameSt
-  { _reserve    = startingDeck
-  , _systems    = mempty
-  , _playerToMv = 0
-  , _numSystems = 0
-  , _numPlayers = 2
-  , _losers     = []
+  { gameStReserve    = startingDeck
+  , gameStSystems    = mempty
+  , gameStPlayerToMv = 0
+  , gameStNumSystems = 0
+  , gameStNumPlayers = 2
+  , gameStLosers     = []
   }
 
 
@@ -42,7 +42,7 @@ starColors ∷ Fold System Color
 starColors = star . to starMakeup . traverse . color
 
 dockedColors ∷ Fold System Color
-dockedColors = ships . traverse . piece . color
+dockedColors = docked . traverse . piece . color
 
 isAHomeworld ∷ SystemId → Getter GameSt Bool
 isAHomeworld loc = numPlayers . to (loc <)
@@ -52,10 +52,10 @@ s `isOwnedBy` p = s ^. owner == p
 
 colorsAvailableFor ∷ PlayerId → System → [Color]
 colorsAvailableFor pid system = (system ^.. starColors)
-                             ++ (view (piece . color) <$> filter (`isOwnedBy` pid) (system ^. ships))
+                             ++ (view (piece.color) <$> filter (`isOwnedBy` pid) (system ^. docked))
 
 systemPieces ∷ System → [Piece]
-systemPieces sys = (sys ^. star . to starMakeup) <> (sys ^.. ships . traverse . piece)
+systemPieces sys = (sys ^. star . to starMakeup) <> (sys ^.. docked . traverse . piece)
 
 pieceAvailable ∷ Piece → Getter GameSt Bool
 pieceAvailable pc = inBank pc . to (> 0)
@@ -75,7 +75,7 @@ assuming cond = use cond >>= guard
 grabPc ∷ Piece → HWMove Piece
 grabPc pc = do
   assuming $ inBank pc . to (>= 1)
-  reserve . at (fromEnum pc) %= Just . (+1) . fromMaybe 0
+  reserve . at (fromEnum pc) %= fromMaybe 0 ▷ (+1) ▷ Just
   return pc
 
 grabShip ∷ Ship → HWMove Ship
@@ -86,13 +86,13 @@ grabStar theStar = mapM_ grabPc (starMakeup theStar) >> return theStar
 
 grabSmallestShipFromReserve ∷ Color → HWMove Piece
 grabSmallestShipFromReserve c = do
-  sz ← lift . smallestInBank c =<< get
+  sz ← get >>= smallestInBank c ▷ lift
   grabPc (Piece c sz)
 
 grabSystem ∷ System → HWMove SystemId
 grabSystem sys = do
   _ ← grabStar (sys ^. star)
-  mapM_ grabShip (sys ^. ships)
+  mapM_ grabShip (sys ^. docked)
   newId ← use numSystems
   numSystems         .= (newId + 1)
   systems . at newId .= Just sys
@@ -135,7 +135,7 @@ lookupSystem loc = do
 shipsAt ∷ SystemId → (Ship → Bool) → HWMove [Ship]
 shipsAt loc f = do
   sys ← lookupSystem loc
-  return $ filter f (sys ^. ships)
+  return $ filter f (sys ^. docked)
 
 piecesAt ∷ SystemId → (Piece → Bool) → HWMove [Piece]
 piecesAt loc f = do
@@ -143,7 +143,7 @@ piecesAt loc f = do
   return $ filter f $ systemPieces sys
 
 shipsExistAt ∷ SystemId → (Ship → Bool) → HWMove Bool
-shipsExistAt loc f = not . null <$> shipsAt loc f
+shipsExistAt loc f = null ▷ not <$> shipsAt loc f
 
 shipExistsAt ∷ SystemId → Ship → HWMove Bool
 shipExistsAt loc ship = shipsExistAt loc (== ship)
@@ -152,7 +152,7 @@ shipSize ∷ Ship → Size
 shipSize = view (piece . size)
 
 biggestShip ∷ [Ship] → (Maybe Ship)
-biggestShip = safeHead . reverse . List.sortOn shipSize
+biggestShip = List.sortOn shipSize ▷ reverse ▷ safeHead
 
 ourLargestShipAt ∷ SystemId → HWMove Ship
 ourLargestShipAt loc = do
@@ -179,7 +179,7 @@ handleWinConditions = do
     mSys ← use (systems . at pid)
     mSys & \case
       Nothing  → playerLoses pid
-      Just sys → when (null $ filter (`isOwnedBy` pid) (sys ^. ships)) $
+      Just sys → when (null $ filter (`isOwnedBy` pid) (sys ^. docked)) $
                    playerLoses pid
 
 advanceTurn ∷ HWMove ()
@@ -191,14 +191,14 @@ advanceTurn = do
 placeShip ∷ SystemId → Ship → HWMove ()
 placeShip loc p = do
   sys ← lookupSystem loc
-  systems . at loc .= Just (over ships (p:) sys)
+  systems . at loc .= Just (over docked (p:) sys)
 
 deleteShip ∷ SystemId → Ship → HWMove ()
 deleteShip loc ship = do
   guard =<< shipExistsAt loc ship
   modify $ over systems
          $ flip IntMap.update loc
-         $ Just . (over ships (List.delete ship))
+         $ over docked (List.delete ship) ▷ Just
 
 
 -- Validate Action Sequences ---------------------------------------------------------------------------------
@@ -289,7 +289,7 @@ tradeShip loc pc newColor = do
   let oldShip = Ship player pc
   guard =<< actionAvailable loc Blue
   guard =<< shipExistsAt loc oldShip
-  let newShip = set (piece . color) newColor oldShip
+  let newShip = set (piece.color) newColor oldShip
   deleteShip loc oldShip
   _ ← grabPc (newShip ^. piece)
   placeShip loc newShip
@@ -320,7 +320,7 @@ systemStarColors loc = do
 
 -- TODO Add everything back to the bank.
 destroySystem ∷ SystemId → HWMove ()
-destroySystem = modify . over systems . IntMap.delete
+destroySystem sys = systems %= IntMap.delete sys
 
 destroyStarsWithColor ∷ SystemId → Color → HWMove ()
 destroyStarsWithColor loc c = do
@@ -335,7 +335,7 @@ destroyStarsWithColor loc c = do
     []      → destroySystem loc
     [p]     → modify $ over systems
                      $ flip IntMap.update loc
-                     $ Just . set star (Single p)
+                     $ set star (Single p) ▷ Just
 
 causeCatastrophe ∷ SystemId → Color → HWMove ()
 causeCatastrophe loc c = do
@@ -360,7 +360,7 @@ cleanup = do
   sysKVPairs ← use (systems . to IntMap.toList)
   forM_ sysKVPairs $ \(loc, sys) → do
     hw ← use (isAHomeworld loc)
-    when (not hw && null (sys ^. ships)) $ do
+    when (not hw && null (sys ^. docked)) $ do
       destroySystem loc
 
 applyAction ∷ Action → HWMove ()

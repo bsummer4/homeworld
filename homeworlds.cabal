@@ -29,6 +29,8 @@ Executable homeworlds-cli
     UnicodeSyntax
     PackageImports
     NoImplicitPrelude
+    MultiParamTypeClasses
+    FunctionalDependencies
 
   build-depends:
     aeson,
@@ -71,6 +73,8 @@ Executable homeworlds-web
     UnicodeSyntax
     PackageImports
     NoImplicitPrelude
+    MultiParamTypeClasses
+    FunctionalDependencies
 
   build-depends:
     aeson,
@@ -126,6 +130,8 @@ Library
     UnicodeSyntax
     PackageImports
     NoImplicitPrelude
+    MultiParamTypeClasses
+    FunctionalDependencies
 
   build-depends:
     aeson,

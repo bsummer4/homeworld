@@ -50,10 +50,10 @@ assertValidIdx ∷ Tile → TTTMove ()
 assertValidIdx (Tile x y) = guard (and [x>=0, x<=2, y>=0, y<=2])
 
 activePlayer ∷ TTTMove Player
-activePlayer = _player <$> get
+activePlayer = view player <$> get
 
-place ∷ Tile → TTTMove ()
-place idx = do
+placePc ∷ Tile → TTTMove ()
+placePc idx = do
   assertValidIdx idx
   c ← activePlayer
   writeSquare idx c
